@@ -49,11 +49,11 @@ cmake_ninja_workdir = D$:/Pengcheng/University/Year3/DBMS/NpcBase/cmake-build-de
 
 build cmake_object_order_depends_target_NpcBase: phony || CMakeFiles/NpcBase.dir
 
-build CMakeFiles/NpcBase.dir/main.cpp.obj: CXX_COMPILER__NpcBase_unscanned_Debug D$:/Pengcheng/University/Year3/DBMS/NpcBase/main.cpp || cmake_object_order_depends_target_NpcBase
-  DEP_FILE = CMakeFiles\NpcBase.dir\main.cpp.obj.d
+build CMakeFiles/NpcBase.dir/src/main.cpp.obj: CXX_COMPILER__NpcBase_unscanned_Debug D$:/Pengcheng/University/Year3/DBMS/NpcBase/src/main.cpp || cmake_object_order_depends_target_NpcBase
+  DEP_FILE = CMakeFiles\NpcBase.dir\src\main.cpp.obj.d
   FLAGS = -g -fdiagnostics-color=always
   OBJECT_DIR = CMakeFiles\NpcBase.dir
-  OBJECT_FILE_DIR = CMakeFiles\NpcBase.dir
+  OBJECT_FILE_DIR = CMakeFiles\NpcBase.dir\src
 
 build CMakeFiles/NpcBase.dir/src/data_dict.cpp.obj: CXX_COMPILER__NpcBase_unscanned_Debug D$:/Pengcheng/University/Year3/DBMS/NpcBase/src/data_dict.cpp || cmake_object_order_depends_target_NpcBase
   DEP_FILE = CMakeFiles\NpcBase.dir\src\data_dict.cpp.obj.d
@@ -93,7 +93,7 @@ build CMakeFiles/NpcBase.dir/src/cli.cpp.obj: CXX_COMPILER__NpcBase_unscanned_De
 #############################################
 # Link the executable NpcBase.exe
 
-build NpcBase.exe: CXX_EXECUTABLE_LINKER__NpcBase_Debug CMakeFiles/NpcBase.dir/main.cpp.obj CMakeFiles/NpcBase.dir/src/data_dict.cpp.obj CMakeFiles/NpcBase.dir/src/mem_manager.cpp.obj CMakeFiles/NpcBase.dir/src/disk_manager.cpp.obj CMakeFiles/NpcBase.dir/src/table_manager.cpp.obj CMakeFiles/NpcBase.dir/src/cli.cpp.obj
+build NpcBase.exe: CXX_EXECUTABLE_LINKER__NpcBase_Debug CMakeFiles/NpcBase.dir/src/main.cpp.obj CMakeFiles/NpcBase.dir/src/data_dict.cpp.obj CMakeFiles/NpcBase.dir/src/mem_manager.cpp.obj CMakeFiles/NpcBase.dir/src/disk_manager.cpp.obj CMakeFiles/NpcBase.dir/src/table_manager.cpp.obj CMakeFiles/NpcBase.dir/src/cli.cpp.obj
   FLAGS = -g
   LINK_LIBRARIES = -lkernel32 -luser32 -lgdi32 -lwinspool -lshell32 -lole32 -loleaut32 -luuid -lcomdlg32 -ladvapi32
   OBJECT_DIR = CMakeFiles\NpcBase.dir

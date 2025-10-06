@@ -1,173 +1,266 @@
-//
-// Created by 彭诚 on 2025/10/3.
-//
-
 #include "../include/cli.h"
 #include <iostream>
-#include <algorithm>
-#include <string>
+#include <sstream>
+#include <vector>
 
-// 分割命令（按空格分割，忽略多余空格）
-std::vector<std::string> CLI::splitCommand(const std::string& command) {
-    std::vector<std::string> tokens;
-    std::string token;
-    for (char c : command) {
-        if (c == ' ') {
-            if (!token.empty()) {
-                tokens.push_back(token);
-                token.clear();
-            }
-        } else {
-            token += c;
-        }
-    }
-    if (!token.empty()) {
-        tokens.push_back(token);
-    }
-    return tokens;
-}
+CLI::CLI(TableManager& tableManager) : tableManager_(tableManager) {}
 
-// 处理INIT命令（初始化主存和磁盘）
-void CLI::handleInit(const std::vector<std::string>& tokens) {
-    if (tokens.size() != 5 || tokens[1] != "-mem" || tokens[3] != "-disk") {
-        std::cout << "[错误] INIT命令格式错误！正确格式：INIT -mem 主存大小(MB) -disk 磁盘大小(GB)" << std::endl;
-        return;
-    }
-    // 解析主存和磁盘大小
-    int mem_size = std::stoi(tokens[2]);
-    int disk_size = std::stoi(tokens[4]);
-    // 初始化主存和磁盘
-    bool mem_ok = mem_manager.initMem(mem_size);
-    bool disk_ok = disk_manager.initDisk(disk_size);
-    if (mem_ok && disk_ok) {
-        is_init = true;
-        std::cout << "[初始化] 主存和磁盘初始化完成！" << std::endl;
-    }
-}
-
-// 处理CREATE TABLE命令
-void CLI::handleCreateTable(const std::vector<std::string>& tokens) {
-    if (!is_init) {
-        std::cout << "[错误] 请先执行INIT命令初始化主存和磁盘！" << std::endl;
-        return;
-    }
-    // 解析表名和字段（格式：CREATE TABLE 表名 (字段1 类型1, 字段2 类型2,...)）
-    if (tokens.size() < 4 || tokens[3] != "(" || tokens.back() != ")") {
-        std::cout << "[错误] CREATE TABLE格式错误！正确格式：CREATE TABLE 表名 (字段1 类型1, 字段2 类型2,...)" << std::endl;
-        return;
-    }
-    std::string table_name = tokens[2];
-    std::vector<std::string> col_names, col_types;
-    // 解析字段部分（tokens[4]到tokens[size-2]）
-    for (size_t i = 4; i < tokens.size() - 1; ++i) {
-        std::string token = tokens[i];
-        if (token.back() == ',') {
-            token.pop_back();  // 去掉逗号
-        }
-        // 字段名和类型用空格分割（如"account_id INT"）
-        std::vector<std::string> col_parts = splitCommand(token);
-        if (col_parts.size() != 2) {
-            std::cout << "[错误] 字段格式错误：" << token << std::endl;
-            return;
-        }
-        col_names.push_back(col_parts[0]);
-        col_types.push_back(col_parts[1]);
-    }
-    // 创建表
-    table_manager.createTable(table_name, col_names, col_types);
-}
-
-// 处理INSERT命令
-void CLI::handleInsertRecord(const std::vector<std::string>& tokens) {
-    if (!is_init) {
-        std::cout << "[错误] 请先执行INIT命令初始化主存和磁盘！" << std::endl;
-        return;
-    }
-    // 解析表名和记录值（格式：INSERT INTO 表名 VALUES (值1, 值2,...)）
-    if (tokens.size() < 6 || tokens[3] != "VALUES" || tokens[4] != "(" || tokens.back() != ")") {
-        std::cout << "[错误] INSERT格式错误！正确格式：INSERT INTO 表名 VALUES (值1, 值2,...)" << std::endl;
-        return;
-    }
-    std::string table_name = tokens[2];
-    Record record;
-    // 解析记录值（tokens[5]到tokens[size-2]）
-    for (size_t i = 5; i < tokens.size() - 1; ++i) {
-        std::string val = tokens[i];
-        if (val.back() == ',') {
-            val.pop_back();  // 去掉逗号
-        }
-        record.values.push_back(val);
-    }
-    // 插入记录
-    table_manager.insertRecord(table_name, record);
-}
-
-// 处理STATUS命令（打印系统状态）
-void CLI::handleStatus() {
-    if (!is_init) {
-        std::cout << "[错误] 请先执行INIT命令初始化主存和磁盘！" << std::endl;
-        return;
-    }
-    dict.printDict();
-    mem_manager.printMemStatus();
-    disk_manager.printDiskStatus();
-}
-
-// 打印帮助信息
-void CLI::printHelp() {
-    std::cout << "\n=== npcbase 支持命令 ===" << std::endl;
-    std::cout << "1. 初始化主存和磁盘：" << std::endl;
-    std::cout << "   INIT -mem <主存大小(MB)> -disk <磁盘大小(GB)>" << std::endl;
-    std::cout << "   示例：INIT -mem 16 -disk 1" << std::endl;
-    std::cout << "2. 创建表：" << std::endl;
-    std::cout << "   CREATE TABLE <表名> (<字段1> <类型1>, <字段2> <类型2>,...)" << std::endl;
-    std::cout << "   示例：CREATE TABLE account (account_id INT, balance DECIMAL(10,2))" << std::endl;
-    std::cout << "3. 插入记录：" << std::endl;
-    std::cout << "   INSERT INTO <表名> VALUES (<值1>, <值2>,...)" << std::endl;
-    std::cout << "   示例：INSERT INTO account VALUES (1, 1000.00)" << std::endl;
-    std::cout << "4. 查看系统状态：" << std::endl;
-    std::cout << "   STATUS" << std::endl;
-    std::cout << "5. 查看帮助：" << std::endl;
-    std::cout << "   HELP" << std::endl;
-    std::cout << "6. 退出：" << std::endl;
-    std::cout << "   EXIT" << std::endl;
-    std::cout << "=====================\n" << std::endl;
-}
-
-// 解析用户命令
-void CLI::parseCommand(const std::string& command) {
-    std::vector<std::string> tokens = splitCommand(command);
-    if (tokens.empty()) return;
-
-    std::string cmd = tokens[0];
-    std::transform(cmd.begin(), cmd.end(), cmd.begin(), ::toupper);  // 命令不区分大小写
-
-    if (cmd == "INIT") {
-        handleInit(tokens);
-    } else if (cmd == "CREATE" && tokens.size() >= 3 && tokens[1] == "TABLE") {
-        handleCreateTable(tokens);
-    } else if (cmd == "INSERT" && tokens.size() >= 4 && tokens[1] == "INTO") {
-        handleInsertRecord(tokens);
-    } else if (cmd == "STATUS") {
-        handleStatus();
-    } else if (cmd == "HELP") {
-        printHelp();
-    } else if (cmd == "EXIT") {
-        std::cout << "退出npcbase..." << std::endl;
-        exit(0);
-    } else {
-        std::cout << "[错误] 未知命令！输入HELP查看支持的命令" << std::endl;
-    }
-}
-
-// 启动命令行循环
 void CLI::run() {
-    std::cout << "=== npcbase 数据库（任务1：初始化模块）===" << std::endl;
-    std::cout << "输入HELP查看支持的命令，输入EXIT退出" << std::endl;
+    std::cout << "NPCBase Database CLI" << std::endl;
+    std::cout << "Type 'help' for commands. Type 'exit' to quit." << std::endl;
+    
     std::string command;
     while (true) {
-        std::cout << "\nnpcbase> ";
+        std::cout << "npcbase> ";
         std::getline(std::cin, command);
-        parseCommand(command);
+        
+        if (command == "exit") {
+            break;
+        }
+        
+        std::vector<std::string> args;
+        std::string cmd = parseCommand(command, args);
+        
+        if (!cmd.empty()) {
+            executeCommand(cmd, args);
+        }
+    }
+}
+
+std::string CLI::parseCommand(const std::string& command, std::vector<std::string>& args) {
+    std::istringstream iss(command);
+    std::string token;
+    std::vector<std::string> tokens;
+    
+    while (iss >> token) {
+        tokens.push_back(token);
+    }
+    
+    if (tokens.empty()) {
+        return "";
+    }
+    
+    std::string cmd = tokens[0];
+    for (size_t i = 1; i < tokens.size(); i++) {
+        args.push_back(tokens[i]);
+    }
+    
+    return cmd;
+}
+
+void CLI::executeCommand(const std::string& cmd, const std::vector<std::string>& args) {
+    if (cmd == "help") {
+        printHelp();
+    } else if (cmd == "create" && args.size() >= 2 && args[0] == "table") {
+        handleCreateTable(args);
+    } else if (cmd == "insert") {
+        handleInsert(args);
+    } else if (cmd == "delete") {
+        handleDelete(args);
+    } else if (cmd == "update") {
+        handleUpdate(args);
+    } else if (cmd == "select") {
+        handleSelect(args);
+    } else if (cmd == "vacuum") {
+        handleVacuum(args);
+    } else {
+        std::cout << "Unknown command. Type 'help' for available commands." << std::endl;
+    }
+}
+
+void CLI::printHelp() {
+    std::cout << "Available commands:" << std::endl;
+    std::cout << "  create table <table_name> (<attr_name> <type> [<length>], ...) - Create a new table" << std::endl;
+    std::cout << "  insert into <table_name> values (...) - Insert a new record" << std::endl;
+    std::cout << "  delete from <table_name> where rid=<page>:<slot> - Delete a record" << std::endl;
+    std::cout << "  update <table_name> set ... where rid=<page>:<slot> - Update a record" << std::endl;
+    std::cout << "  select from <table_name> where rid=<page>:<slot> - Retrieve a record" << std::endl;
+    std::cout << "  vacuum <table_name> - Perform garbage collection" << std::endl;
+    std::cout << "  help - Show this help message" << std::endl;
+    std::cout << "  exit - Quit the CLI" << std::endl;
+}
+
+void CLI::handleCreateTable(const std::vector<std::string>& args) {
+    if (args.size() < 2) {
+        std::cout << "Usage: create table <table_name> (<attr_name> <type> [<length>], ...)" << std::endl;
+        return;
+    }
+    
+    std::string tableName = args[1];
+    std::vector<AttrInfo> attrs;
+    
+    // 解析属性列表（简化实现）
+    for (size_t i = 2; i < args.size(); i += 2) {
+        if (i + 1 >= args.size()) break;
+        
+        AttrInfo attr;
+        strncpy(attr.name, args[i].c_str(), MAX_ATTR_NAME_LEN - 1);
+        
+        if (args[i+1] == "int") {
+            attr.type = INT;
+            attr.length = 4;
+        } else if (args[i+1] == "float") {
+            attr.type = FLOAT;
+            attr.length = 4;
+        } else if (args[i+1] == "string") {
+            attr.type = STRING;
+            attr.length = 255;  // 默认长度
+            if (i + 2 < args.size()) {
+                attr.length = std::stoi(args[i+2]);
+                i++;  // 跳过长度参数
+            }
+        } else {
+            std::cout << "Unknown type: " << args[i+1] << std::endl;
+            return;
+        }
+        
+        attrs.push_back(attr);
+    }
+    
+    if (attrs.empty()) {
+        std::cout << "No attributes specified for table" << std::endl;
+        return;
+    }
+    
+    RC rc = tableManager_.createTable(tableName.c_str(), attrs.size(), attrs.data());
+    if (rc == RC_OK) {
+        std::cout << "Table " << tableName << " created successfully" << std::endl;
+    } else if (rc == RC_TABLE_EXISTS) {
+        std::cout << "Error: Table " << tableName << " already exists" << std::endl;
+    } else {
+        std::cout << "Error creating table: " << rc << std::endl;
+    }
+}
+
+void CLI::handleInsert(const std::vector<std::string>& args) {
+    if (args.size() < 3 || args[0] != "into" || args[2] != "values") {
+        std::cout << "Usage: insert into <table_name> values (...) - Insert a new record" << std::endl;
+        return;
+    }
+    
+    std::string tableName = args[1];
+    // 简化实现：假设数据是一个字符串
+    std::string data;
+    for (size_t i = 3; i < args.size(); i++) {
+        if (i > 3) data += " ";
+        data += args[i];
+    }
+    
+    RID rid;
+    RC rc = tableManager_.insertRecord(tableName.c_str(), data.c_str(), data.length(), rid);
+    if (rc == RC_OK) {
+        std::cout << "Record inserted with RID: " << rid.pageNum << ":" << rid.slotNum << std::endl;
+    } else {
+        std::cout << "Error inserting record: " << rc << std::endl;
+    }
+}
+
+void CLI::handleDelete(const std::vector<std::string>& args) {
+    if (args.size() < 4 || args[0] != "from" || args[2] != "where" || args[3].substr(0, 4) != "rid=") {
+        std::cout << "Usage: delete from <table_name> where rid=<page>:<slot>" << std::endl;
+        return;
+    }
+    
+    std::string tableName = args[1];
+    std::string ridStr = args[3].substr(4);
+    size_t colonPos = ridStr.find(':');
+    if (colonPos == std::string::npos) {
+        std::cout << "Invalid RID format. Use <page>:<slot>" << std::endl;
+        return;
+    }
+    
+    try {
+        PageNum pageNum = std::stoi(ridStr.substr(0, colonPos));
+        SlotNum slotNum = std::stoi(ridStr.substr(colonPos + 1));
+        RID rid(pageNum, slotNum);
+        
+        RC rc = tableManager_.deleteRecord(tableName.c_str(), rid);
+        if (rc == RC_OK) {
+            std::cout << "Record deleted successfully" << std::endl;
+        } else {
+            std::cout << "Error deleting record: " << rc << std::endl;
+        }
+    } catch (...) {
+        std::cout << "Invalid RID format" << std::endl;
+    }
+}
+
+void CLI::handleUpdate(const std::vector<std::string>& args) {
+    if (args.size() < 6 || args[0] != "<table_name>" || args[1] != "set" || args[3] != "where" || args[4].substr(0, 4) != "rid=") {
+        std::cout << "Usage: update <table_name> set ... where rid=<page>:<slot>" << std::endl;
+        return;
+    }
+    
+    std::string tableName = args[0];
+    std::string newData = args[2];  // 简化实现
+    
+    std::string ridStr = args[4].substr(4);
+    size_t colonPos = ridStr.find(':');
+    if (colonPos == std::string::npos) {
+        std::cout << "Invalid RID format. Use <page>:<slot>" << std::endl;
+        return;
+    }
+    
+    try {
+        PageNum pageNum = std::stoi(ridStr.substr(0, colonPos));
+        SlotNum slotNum = std::stoi(ridStr.substr(colonPos + 1));
+        RID rid(pageNum, slotNum);
+        
+        RC rc = tableManager_.updateRecord(tableName.c_str(), rid, newData.c_str(), newData.length());
+        if (rc == RC_OK) {
+            std::cout << "Record updated successfully" << std::endl;
+        } else {
+            std::cout << "Error updating record: " << rc << std::endl;
+        }
+    } catch (...) {
+        std::cout << "Invalid RID format" << std::endl;
+    }
+}
+
+void CLI::handleSelect(const std::vector<std::string>& args) {
+    if (args.size() < 4 || args[0] != "from" || args[2] != "where" || args[3].substr(0, 4) != "rid=") {
+        std::cout << "Usage: select from <table_name> where rid=<page>:<slot>" << std::endl;
+        return;
+    }
+    
+    std::string tableName = args[1];
+    std::string ridStr = args[3].substr(4);
+    size_t colonPos = ridStr.find(':');
+    if (colonPos == std::string::npos) {
+        std::cout << "Invalid RID format. Use <page>:<slot>" << std::endl;
+        return;
+    }
+    
+    try {
+        PageNum pageNum = std::stoi(ridStr.substr(0, colonPos));
+        SlotNum slotNum = std::stoi(ridStr.substr(colonPos + 1));
+        RID rid(pageNum, slotNum);
+        
+        char* data = nullptr;
+        int length = 0;
+        RC rc = tableManager_.readRecord(tableName.c_str(), rid, data, length);
+        if (rc == RC_OK) {
+            std::cout << "Record data: " << std::string(data, length) << std::endl;
+            delete[] data;
+        } else {
+            std::cout << "Error reading record: " << rc << std::endl;
+        }
+    } catch (...) {
+        std::cout << "Invalid RID format" << std::endl;
+    }
+}
+
+void CLI::handleVacuum(const std::vector<std::string>& args) {
+    if (args.size() < 1) {
+        std::cout << "Usage: vacuum <table_name>" << std::endl;
+        return;
+    }
+    
+    std::string tableName = args[0];
+    RC rc = tableManager_.vacuum(tableName.c_str());
+    if (rc == RC_OK) {
+        std::cout << "Vacuum completed successfully" << std::endl;
+    } else {
+        std::cout << "Error during vacuum: " << rc << std::endl;
     }
 }

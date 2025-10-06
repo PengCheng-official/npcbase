@@ -1,35 +1,75 @@
-//
-// Created by 彭诚 on 2025/10/3.
-//
-
-#ifndef NPCBASE_DISK_MANAGER_H
-#define NPCBASE_DISK_MANAGER_H
+#ifndef DISK_MANAGER_H
+#define DISK_MANAGER_H
 
 #include "npcbase.h"
-#include "data_dict.h"
-#include <vector>
+#include <string>
+#include <fstream>
 
+// 磁盘管理器类
 class DiskManager {
-private:
-    std::vector<Block> disk_blocks;  // 磁盘块列表
-    DataDictionary& dict;            // 关联数据字典
-
 public:
-    // 构造函数：初始化磁盘
-    DiskManager(DataDictionary& d) : dict(d) {}
+    /**
+     * 构造函数：初始化磁盘大小和数据库名称
+     * @param diskSize 磁盘大小（字节）
+     * @param dbName 数据库名称
+     */
+    DiskManager(size_t diskSize, const std::string& dbName);
+    ~DiskManager();
 
-    // 初始化磁盘：输入磁盘大小（GB），划分块并分配系统表初始块
-    bool initDisk(int disk_size_gb);
+    /**
+     * 初始化磁盘（创建/打开文件、初始化位图）
+     */
+    RC init();
 
-    // 为表分配1个磁盘块（从空闲块中选择）
-    std::string allocateBlock(int table_id);
+    /**
+     * 分配新块
+     * @param blockNum 输出参数，返回分配的块号
+     */
+    RC allocBlock(BlockNum& blockNum);
 
-    // 向磁盘块写入记录（更新块空闲空间和数据）
-    bool writeRecordToBlock(const std::string& block_id, const Record& record,
-                            const std::vector<std::string>& col_types);
+    /**
+     * 释放块
+     * @param blockNum 块号
+     */
+    RC freeBlock(BlockNum blockNum);
 
-    // 打印磁盘状态（调试用）
-    void printDiskStatus();
+    /**
+     * 从块读取数据
+     * @param blockNum 块号
+     * @param data 数据缓冲区
+     */
+    RC readBlock(BlockNum blockNum, char* data);
+
+    /**
+     * 向块写入数据
+     * @param blockNum 块号
+     * @param data 数据缓冲区
+     */
+    RC writeBlock(BlockNum blockNum, const char* data);
+
+    /**
+     * 获取块数量
+     */
+    int getBlockCount() const { return totalBlocks_; }
+
+    /**
+     * 检查块是否已分配
+     * @param blockNum 块号
+     */
+    bool isBlockAllocated(BlockNum blockNum);
+
+private:
+    size_t diskSize_;          // 磁盘大小
+    std::string dbName_;       // 数据库名称
+    std::fstream dbFile_;      // 数据库文件流（操作磁盘文件）
+    int totalBlocks_;          // 总块数
+    char* blockBitmap_;        // 块分配位图（1位表示1个块的分配状态：1=已分配，0=未分配）
+
+    /**
+     * 计算块在文件中的偏移量
+     * @param blockNum 块号
+     */
+    size_t blockToOffset(BlockNum blockNum) const;
 };
 
-#endif //NPCBASE_DISK_MANAGER_H
+#endif  // DISK_MANAGER_H

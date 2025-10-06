@@ -1,104 +1,112 @@
-//
-// Created by 彭诚 on 2025/10/3.
-//
-
-
 #include "../include/data_dict.h"
-#include <iostream>
-#include <cstdio>
+#include <cstring>
+#include <algorithm>
 
-// 生成主存块ID（M_001, M_002...）
-std::string DataDictionary::generateMemBlockId() {
-    char buf[20];
-    std::sprintf(buf, "%s%03d", MEM_BLOCK_PREFIX.c_str(), next_mem_block_idx++);
-    return buf;
+RC DataDict::init() {
+    // 初始化数据字典，实际实现中可能需要从磁盘加载
+    tables_.clear();
+    nextTableId_ = 1;
+    return RC_OK;
 }
 
-// 生成磁盘块ID（D_001, D_002...）
-std::string DataDictionary::generateDiskBlockId() {
-    char buf[20];
-    std::sprintf(buf, "%s%03d", DISK_BLOCK_PREFIX.c_str(), next_disk_block_idx++);
-    return buf;
-}
+RC DataDict::createTable(const char* tableName, int attrCount, const AttrInfo* attrs, TableId& tableId) {
+    if (tableName == nullptr || attrCount <= 0 || attrCount > MAX_ATTRS_PER_TABLE || attrs == nullptr) {
+        return RC_INVALID_ARG;
+    }
 
-// 添加表元数据
-int DataDictionary::addTable(const std::string& table_name,
-                             const std::vector<std::string>& col_names,
-                             const std::vector<std::string>& col_types) {
-    DictTable table;
-    table.table_id = next_table_id++;
-    table.table_name = table_name;
-    table.block_count = 0;
-    table.first_block_id = "";
-    table.col_names = col_names;
-    table.col_types = col_types;
-    tables.push_back(table);
-    std::cout << "[数据字典] 表创建成功：table_id=" << table.table_id << ", table_name=" << table_name << std::endl;
-    return table.table_id;
-}
-
-// 添加块元数据
-void DataDictionary::addBlock(const std::string& block_id, const std::string& block_type,
-                              int table_id, int free_space) {
-    DictBlock block;
-    block.block_id = block_id;
-    block.block_type = block_type;
-    block.table_id = table_id;
-    block.free_space = free_space;
-    blocks.push_back(block);
-}
-
-// 根据表名查询表元数据
-DictTable* DataDictionary::getTableByName(const std::string& table_name) {
-    for (auto& table : tables) {
-        if (table.table_name == table_name) {
-            return &table;
+    // 检查表是否已存在
+    for (const auto& table : tables_) {
+        if (strcmp(table.tableName, tableName) == 0) {
+            return RC_TABLE_EXISTS;
         }
     }
-    return nullptr;
+
+    // 创建新表信息
+    TableInfo table;
+    table.tableId = nextTableId_++;
+    strncpy(table.tableName, tableName, MAX_TABLE_NAME_LEN - 1);
+    table.tableName[MAX_TABLE_NAME_LEN - 1] = '\0';
+    table.attrCount = attrCount;
+    table.firstPage = -1;
+    table.lastPage = -1;
+    table.recordCount = 0;
+    table.deletedCount = 0;
+
+    // 复制属性信息
+    for (int i = 0; i < attrCount; i++) {
+        strncpy(table.attrs[i].name, attrs[i].name, MAX_ATTR_NAME_LEN - 1);
+        table.attrs[i].name[MAX_ATTR_NAME_LEN - 1] = '\0';
+        table.attrs[i].type = attrs[i].type;
+        table.attrs[i].length = attrs[i].length;
+    }
+
+    tables_.push_back(table);
+    tableId = table.tableId;
+    return RC_OK;
 }
 
-// 根据表ID查询该表的所有块元数据
-std::vector<DictBlock> DataDictionary::getBlocksByTableId(int table_id) {
-    std::vector<DictBlock> res;
-    for (auto& block : blocks) {
-        if (block.table_id == table_id && block.block_type == "TABLE_DATA") {
-            res.push_back(block);
-        }
+RC DataDict::dropTable(const char* tableName) {
+    if (tableName == nullptr) {
+        return RC_INVALID_ARG;
     }
-    return res;
+
+    auto it = std::find_if(tables_.begin(), tables_.end(), [tableName](const TableInfo& table) {
+        return strcmp(table.tableName, tableName) == 0;
+    });
+
+    if (it == tables_.end()) {
+        return RC_TABLE_NOT_FOUND;
+    }
+
+    tables_.erase(it);
+    return RC_OK;
 }
 
-// 更新块元数据（空闲空间）
-bool DataDictionary::updateBlockFreeSpace(const std::string& block_id, int new_free_space) {
-    for (auto& block : blocks) {
-        if (block.block_id == block_id) {
-            block.free_space = new_free_space;
-            return true;
+RC DataDict::findTable(const char* tableName, TableInfo& tableInfo) {
+    if (tableName == nullptr) {
+        return RC_INVALID_ARG;
+    }
+
+    for (const auto& table : tables_) {
+        if (strcmp(table.tableName, tableName) == 0) {
+            tableInfo = table;
+            return RC_OK;
         }
     }
-    return false;
+
+    return RC_TABLE_NOT_FOUND;
 }
 
-// 打印数据字典（调试用）
-void DataDictionary::printDict() {
-    std::cout << "\n=== 数据字典状态 ===" << std::endl;
-    // 打印表信息
-    std::cout << "1. 表列表：" << std::endl;
-    for (auto& table : tables) {
-        std::cout << "   table_id=" << table.table_id << ", name=" << table.table_name
-                  << ", block_count=" << table.block_count << ", first_block=" << table.first_block_id << std::endl;
-        std::cout << "     字段：";
-        for (size_t i = 0; i < table.col_names.size(); ++i) {
-            std::cout << table.col_names[i] << "(" << table.col_types[i] << ") ";
+RC DataDict::findTableById(TableId tableId, TableInfo& tableInfo) {
+    for (const auto& table : tables_) {
+        if (table.tableId == tableId) {
+            tableInfo = table;
+            return RC_OK;
         }
-        std::cout << std::endl;
     }
-    // 打印块信息
-    std::cout << "2. 块列表：" << std::endl;
-    for (auto& block : blocks) {
-        std::cout << "   block_id=" << block.block_id << ", type=" << block.block_type
-                  << ", table_id=" << block.table_id << ", free_space=" << block.free_space << "B" << std::endl;
+
+    return RC_TABLE_NOT_FOUND;
+}
+
+RC DataDict::updateTableInfo(TableId tableId, PageNum lastPage, int recordCount) {
+    for (auto& table : tables_) {
+        if (table.tableId == tableId) {
+            if (table.firstPage == -1) {
+                table.firstPage = lastPage;
+            }
+            table.lastPage = lastPage;
+            table.recordCount = recordCount;
+            return RC_OK;
+        }
     }
-    std::cout << "===================\n" << std::endl;
+
+    return RC_TABLE_NOT_FOUND;
+}
+
+RC DataDict::listTables(std::vector<std::string>& tables) {
+    tables.clear();
+    for (const auto& table : tables_) {
+        tables.push_back(std::string(table.tableName));
+    }
+    return RC_OK;
 }

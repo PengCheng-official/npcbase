@@ -1,51 +1,83 @@
-//
-// Created by 彭诚 on 2025/10/3.
-//
+#ifndef CLI_H
+#define CLI_H
 
-#ifndef NPCBASE_CLI_H
-#define NPCBASE_CLI_H
-
-#include "data_dict.h"
-#include "mem_manager.h"
-#include "disk_manager.h"
 #include "table_manager.h"
 #include <string>
 #include <vector>
 
+// 命令行交互类
 class CLI {
+public:
+    /**
+     * 构造函数
+     * @param tableManager 表管理器引用
+     */
+    CLI(TableManager& tableManager);
+    ~CLI() = default;
+
+    /**
+     * 启动命令行交互
+     */
+    void run();
+
 private:
-    DataDictionary dict;         // 数据字典
-    MemManager mem_manager;      // 主存管理
-    DiskManager disk_manager;    // 磁盘管理
-    TableManager table_manager;  // 表管理
-    bool is_init = false;        // 是否已完成主存/磁盘初始化
+    TableManager& tableManager_;  // 表管理器引用
 
-    // 分割命令（按空格分割，忽略多余空格）
-    std::vector<std::string> splitCommand(const std::string& command);
+    /**
+     * 解析命令
+     * @param command 命令字符串
+     * @param args 输出参数，返回命令参数
+     * @return 命令类型
+     */
+    std::string parseCommand(const std::string& command, std::vector<std::string>& args);
 
-    // 处理INIT命令（初始化主存和磁盘）
-    void handleInit(const std::vector<std::string>& tokens);
+    /**
+     * 执行命令
+     * @param cmd 命令类型
+     * @param args 命令参数
+     */
+    void executeCommand(const std::string& cmd, const std::vector<std::string>& args);
 
-    // 处理CREATE TABLE命令
-    void handleCreateTable(const std::vector<std::string>& tokens);
-
-    // 处理INSERT命令
-    void handleInsertRecord(const std::vector<std::string>& tokens);
-
-    // 处理STATUS命令（打印系统状态）
-    void handleStatus();
-
-    // 打印帮助信息
+    /**
+     * 打印帮助信息
+     */
     void printHelp();
 
-public:
-    CLI() : mem_manager(dict), disk_manager(dict), table_manager(dict, disk_manager) {}
+    /**
+     * 处理创建表命令
+     * @param args 命令参数
+     */
+    void handleCreateTable(const std::vector<std::string>& args);
 
-    // 解析用户命令
-    void parseCommand(const std::string& command);
+    /**
+     * 处理插入记录命令
+     * @param args 命令参数
+     */
+    void handleInsert(const std::vector<std::string>& args);
 
-    // 启动命令行循环
-    void run();
+    /**
+     * 处理删除记录命令
+     * @param args 命令参数
+     */
+    void handleDelete(const std::vector<std::string>& args);
+
+    /**
+     * 处理更新记录命令
+     * @param args 命令参数
+     */
+    void handleUpdate(const std::vector<std::string>& args);
+
+    /**
+     * 处理查询记录命令
+     * @param args 命令参数
+     */
+    void handleSelect(const std::vector<std::string>& args);
+
+    /**
+     * 处理垃圾回收命令
+     * @param args 命令参数
+     */
+    void handleVacuum(const std::vector<std::string>& args);
 };
 
-#endif //NPCBASE_CLI_H
+#endif  // CLI_H

@@ -3,7 +3,7 @@ project(NpcBase)
 
 set(CMAKE_CXX_STANDARD 17)
 
-add_executable(NpcBase main.cpp
+add_executable(NpcBase src/main.cpp
         include/npcbase.h
         include/data_dict.h
         src/data_dict.cpp
@@ -14,4 +14,5 @@ add_executable(NpcBase main.cpp
         src/table_manager.cpp
         include/table_manager.h
         src/cli.cpp
-        include/cli.h)
+        include/cli.h
+)

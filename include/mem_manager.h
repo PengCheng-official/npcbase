@@ -1,28 +1,123 @@
-//
-// Created by 彭诚 on 2025/10/3.
-//
-
-#ifndef NPCBASE_MEM_MANAGER_H
-#define NPCBASE_MEM_MANAGER_H
+#ifndef MEM_MANAGER_H
+#define MEM_MANAGER_H
 
 #include "npcbase.h"
-#include "data_dict.h"
+#include "disk_manager.h"
 #include <vector>
 
-class MemManager {
-private:
-    std::vector<Block> mem_blocks;   // 主存块列表
-    DataDictionary& dict;            // 关联数据字典
+// 缓冲帧结构体
+struct BufferFrame {
+    PageNum pageNum;       // 页号
+    TableId tableId;       // 表ID
+    char *data;            // 页数据
+    bool isValid;          // 合法标记
+    bool isDirty;          // 脏页标记
+    bool refBit;           // 引用位（CLOCK算法）
+    MemSpaceType spaceType;// 内存分区类型
+    int pinCount;          // 固定计数
 
-public:
-    // 构造函数：初始化主存
-    MemManager(DataDictionary& d) : dict(d) {}
 
-    // 初始化主存：输入主存大小（MB），划分块
-    bool initMem(int mem_size_mb);
-
-    // 打印主存状态（调试用）
-    void printMemStatus();
+    BufferFrame() : pageNum(-1), tableId(-1), data(nullptr), isValid(true),
+                    isDirty(false), refBit(false),
+                    spaceType(DATA_SPACE), pinCount(0) {}
 };
 
-#endif //NPCBASE_MEM_MANAGER_H
+// 内存管理器类
+class MemManager {
+public:
+    /**
+     * 构造函数
+     * @param totalMemSize 总内存大小（字节）
+     */
+    MemManager(size_t totalMemSize, DiskManager& diskManager);
+    ~MemManager();
+
+    /**
+     * 初始化内存管理器
+     */
+    RC init();
+
+    /**
+     * 从缓冲池获取页
+     * @param tableId 表ID
+     * @param pageNum 页号
+     * @param frame 输出参数，返回缓冲帧
+     * @param spaceType 内存分区类型
+     */
+    RC getPage(TableId tableId, PageNum pageNum, BufferFrame *&frame, MemSpaceType spaceType);
+
+    /**
+     * 释放页（减少固定计数）
+     * @param tableId 表ID
+     * @param pageNum 页号
+     */
+    RC releasePage(TableId tableId, PageNum pageNum);
+
+    /**
+     * 标记页为脏页
+     * @param tableId 表ID
+     * @param pageNum 页号
+     */
+    RC markDirty(TableId tableId, PageNum pageNum);
+
+    /**
+     * 刷新指定页到磁盘
+     * @param tableId 表ID
+     * @param pageNum 页号
+     */
+    RC flushPage(TableId tableId, PageNum pageNum);
+
+    /**
+     * 刷新所有脏页到磁盘
+     */
+    RC flushAllPages();
+
+    /**
+     * 获取空闲缓冲帧（可能需要置换）
+     * @param frame 输出参数，返回空闲缓冲帧
+     * @param spaceType 内存分区类型
+     */
+    RC getFreeFrame(BufferFrame *&frame, MemSpaceType spaceType);
+
+private:
+    size_t totalMemSize_;              // 总内存大小
+    size_t planCacheSize_;             // 访问计划区大小
+    size_t dictCacheSize_;             // 数据字典区大小
+    size_t dataCacheSize_;             // 数据处理缓存区大小
+    size_t logCacheSize_;              // 日志缓存区大小
+
+    int totalFrames_;                  // 总帧数
+    int planFrames_;                   // 访问计划区帧数
+    int dictFrames_;                   // 数据字典区帧数
+    int dataFrames_;                   // 数据处理缓存区帧数
+    int logFrames_;                    // 日志缓存区帧数
+
+    std::vector<BufferFrame> frames_;  // 缓冲帧数组
+    int clockHand_;                    // CLOCK算法指针
+
+    DiskManager& diskManager_;
+
+    /**
+     * 执行CLOCK置换算法，找到可置换的页
+     * @param spaceType 内存分区类型
+     * @return 可置换的帧索引，-1表示失败
+     */
+    int clockReplace(MemSpaceType spaceType);
+
+    /**
+     * 查找缓冲帧
+     * @param tableId 表ID
+     * @param pageNum 页号
+     * @return 找到的帧索引，-1表示未找到
+     */
+    int findFrame(TableId tableId, PageNum pageNum);
+
+    /**
+     * 查找空闲缓冲帧
+     * @param spaceType 对应分区
+     * @return 找到的帧索引，-1表示未找到
+     */
+    int findFreeFrame(MemSpaceType spaceType);
+};
+
+#endif  // MEM_MANAGER_H

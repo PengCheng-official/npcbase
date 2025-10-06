@@ -1,49 +1,79 @@
-//
-// Created by 彭诚 on 2025/10/3.
-//
-
-#ifndef NPCBASE_DATA_DICT_H
-#define NPCBASE_DATA_DICT_H
+#ifndef DATA_DICT_H
+#define DATA_DICT_H
 
 #include "npcbase.h"
 #include <vector>
 #include <string>
 
-class DataDictionary {
-private:
-    std::vector<DictTable> tables;   // 所有表元数据
-    std::vector<DictBlock> blocks;   // 所有块元数据
-    int next_table_id = 1;           // 下一个表ID（从1开始）
-    int next_mem_block_idx = 1;      // 下一个主存块索引
-    int next_disk_block_idx = 1;     // 下一个磁盘块索引
-
-public:
-    // 生成主存块ID
-    std::string generateMemBlockId();
-
-    // 生成磁盘块ID
-    std::string generateDiskBlockId();
-
-    // 添加表元数据
-    int addTable(const std::string& table_name,
-                 const std::vector<std::string>& col_names,
-                 const std::vector<std::string>& col_types);
-
-    // 添加块元数据
-    void addBlock(const std::string& block_id, const std::string& block_type,
-                  int table_id, int free_space);
-
-    // 根据表名查询表元数据
-    DictTable* getTableByName(const std::string& table_name);
-
-    // 根据表ID查询该表的所有块元数据
-    std::vector<DictBlock> getBlocksByTableId(int table_id);
-
-    // 更新块元数据（空闲空间）
-    bool updateBlockFreeSpace(const std::string& block_id, int new_free_space);
-
-    // 打印数据字典（调试用）
-    void printDict();
+// 表信息结构体
+struct TableInfo {
+    TableId tableId;                     // 表ID
+    char tableName[MAX_TABLE_NAME_LEN];  // 表名
+    int attrCount;                       // 属性数量
+    AttrInfo attrs[MAX_ATTRS_PER_TABLE]; // 属性信息数组
+    PageNum firstPage;                   // 第一个数据页
+    PageNum lastPage;                    // 最后一个数据页
+    int deletedCount;                    // 被删除的记录数
+    int recordCount;                     // 记录总数
 };
 
-#endif //NPCBASE_DATA_DICT_H
+// 数据字典管理类
+class DataDict {
+public:
+    DataDict() = default;
+    ~DataDict() = default;
+
+    /**
+     * 初始化数据字典
+     */
+    RC init();
+
+    /**
+     * 创建新表并添加到数据字典
+     * @param tableName 表名
+     * @param attrCount 属性数量
+     * @param attrs 属性信息数组
+     * @param tableId 输出参数，返回表ID
+     */
+    RC createTable(const char* tableName, int attrCount, const AttrInfo* attrs, TableId& tableId);
+
+    /**
+     * 删除表
+     * @param tableName 表名
+     */
+    RC dropTable(const char* tableName);
+
+    /**
+     * 查找表信息
+     * @param tableName 表名
+     * @param tableInfo 输出参数，返回表信息
+     */
+    RC findTable(const char* tableName, TableInfo& tableInfo);
+
+    /**
+     * 查找表信息（通过表ID）
+     * @param tableId 表ID
+     * @param tableInfo 输出参数，返回表信息
+     */
+    RC findTableById(TableId tableId, TableInfo& tableInfo);
+
+    /**
+     * 更新表的页面信息
+     * @param tableId 表ID
+     * @param lastPage 最后一个数据页
+     * @param recordCount 记录总数
+     */
+    RC updateTableInfo(TableId tableId, PageNum lastPage, int recordCount);
+
+    /**
+     * 获取所有表名
+     * @param tables 输出参数，返回表名列表
+     */
+    RC listTables(std::vector<std::string>& tables);
+
+private:
+    std::vector<TableInfo> tables_;  // 存储所有表信息
+    TableId nextTableId_ = 1;        // 下一个可用的表ID
+};
+
+#endif  // DATA_DICT_H
