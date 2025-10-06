@@ -1,0 +1,3 @@
+D:/Pengcheng/University/Year3/DBMS/NpcBase/cmake-build-debug/CMakeFiles/NpcBase.dir
+D:/Pengcheng/University/Year3/DBMS/NpcBase/cmake-build-debug/CMakeFiles/edit_cache.dir
+D:/Pengcheng/University/Year3/DBMS/NpcBase/cmake-build-debug/CMakeFiles/rebuild_cache.dir
