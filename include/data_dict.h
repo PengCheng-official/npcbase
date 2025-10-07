@@ -2,6 +2,7 @@
 #define DATA_DICT_H
 
 #include "npcbase.h"
+#include "log_manager.h"
 #include <vector>
 #include <string>
 
@@ -24,6 +25,11 @@ public:
     ~DataDict() = default;
 
     /**
+     * 设置日志管理器
+     */
+    void setLogManager(LogManager* logManager) { logManager_ = logManager; }
+
+    /**
      * 初始化数据字典
      */
     RC init();
@@ -35,13 +41,13 @@ public:
      * @param attrs 属性信息数组
      * @param tableId 输出参数，返回表ID
      */
-    RC createTable(const char* tableName, int attrCount, const AttrInfo* attrs, TableId& tableId);
+    RC createTable(TransactionId txId, const char *tableName, int attrCount, const AttrInfo *attrs, TableId &tableId);
 
     /**
      * 删除表
      * @param tableName 表名
      */
-    RC dropTable(const char* tableName);
+    RC dropTable(TransactionId txId, const char *tableName);
 
     /**
      * 查找表信息
@@ -74,6 +80,7 @@ public:
 private:
     std::vector<TableInfo> tables_;  // 存储所有表信息
     TableId nextTableId_ = 1;        // 下一个可用的表ID
+    LogManager* logManager_;         // 日志管理器指针，防止循环依赖
 };
 
 #endif  // DATA_DICT_H

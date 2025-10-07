@@ -3,6 +3,7 @@
 #include "../include/mem_manager.h"
 #include "../include/disk_manager.h"
 #include "../include/table_manager.h"
+#include "../include/log_manager.h"
 #include "../include/cli.h"
 #include <iostream>
 #include <limits>
@@ -40,13 +41,17 @@ int main(int argc, char* argv[]) {
     size_t memSize = inputAndAdjustSpaceSize("Main Memory");
     size_t diskSize = inputAndAdjustSpaceSize("Disk Memory");
     std::string dbName = DEFAULT_DB_NAME;
-    
-    // 初始化核心组件
-    DataDict dataDict;
+
+    // 初始化底层组件
     DiskManager diskManager(diskSize, dbName);
     MemManager memManager(memSize, diskManager);
-    TableManager tableManager(dataDict, memManager, diskManager);
-    
+    LogManager logManager(diskManager, memManager);
+    DataDict dataDict;
+    dataDict.setLogManager(&logManager);
+
+    // 初始化表管理器（集成索引和事务支持）
+    TableManager tableManager(dataDict, diskManager, memManager, logManager);
+
     // 初始化数据库
     RC rc = diskManager.init();
     if (rc != RC_OK) {

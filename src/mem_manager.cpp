@@ -50,53 +50,21 @@ RC MemManager::init() {
     return RC_OK;
 }
 
-//RC MemManager::getPage(TableId tableId, PageNum pageNum, BufferFrame*& frame, MemSpaceType spaceType) {
-//    int idx = findFrame(tableId, pageNum);
-//    if (idx != -1) {
-//        // 页面已在缓冲池，更新引用位
-//        frames_[idx].refBit = true;
-//        frames_[idx].pinCount++;
-//        frame = &frames_[idx];
-//        return RC_OK;
-//    }
-//
-//    // 页面不在缓冲池，需要获取空闲帧
-//    BufferFrame* freeFrame = nullptr;
-//    RC rc = getFreeFrame(freeFrame, spaceType);
-//    if (rc != RC_OK) {
-//        return rc;
-//    }
-//
-//    // 初始化新帧
-//    freeFrame->tableId = tableId;
-//    freeFrame->pageNum = pageNum;
-//    freeFrame->isDirty = false;
-//    freeFrame->refBit = true;
-//    freeFrame->pinCount = 1;
-//    freeFrame->spaceType = spaceType;
-//
-//    // 实际实现中应该从磁盘读取数据
-//    memset(freeFrame->data, 0, BLOCK_SIZE);
-//
-//    frame = freeFrame;
-//    return RC_OK;
-//}
-
 RC MemManager::getPage(TableId tableId, PageNum pageNum, BufferFrame *&frame, MemSpaceType spaceType) {
     // 1. 检查缓冲池中是否已有该页面
     for (int i = 0; i < totalFrames_; i++) {
         if (frames_[i].isValid && frames_[i].tableId == tableId && frames_[i].pageNum == pageNum) {
             frames_[i].pinCount++;
-            frames_[i].refBit = true;  // 修复：用refBit替代isReferenced
+            frames_[i].refBit = true;
             frame = &frames_[i];
             return RC_OK;
         }
     }
 
     // 2. 缓存未命中，查找空闲帧或置换
-    int frameIdx = findFreeFrame(spaceType);  // 使用实现的findFreeFrame
+    int frameIdx = findFreeFrame(spaceType);
     if (frameIdx == -1) {
-        frameIdx = clockReplace(spaceType);  // 执行CLOCK置换
+        frameIdx = clockReplace(spaceType);
         if (frameIdx == -1) {
             return RC_BUFFER_FULL;
         }
@@ -105,7 +73,7 @@ RC MemManager::getPage(TableId tableId, PageNum pageNum, BufferFrame *&frame, Me
     // 3. 若置换的帧是脏页，先刷盘
     BufferFrame &targetFrame = frames_[frameIdx];
     if (targetFrame.isDirty) {
-        RC rc = diskManager_.writeBlock(targetFrame.pageNum, targetFrame.data);  // 使用diskManager_
+        RC rc = diskManager_.writeBlock(targetFrame.pageNum, targetFrame.data);
         if (rc != RC_OK) {
             return rc;
         }
@@ -113,7 +81,7 @@ RC MemManager::getPage(TableId tableId, PageNum pageNum, BufferFrame *&frame, Me
     }
 
     // 4. 从磁盘读取页面数据
-    RC rc = diskManager_.readBlock(pageNum, targetFrame.data);  // 使用diskManager_
+    RC rc = diskManager_.readBlock(pageNum, targetFrame.data);
     if (rc != RC_OK) {
         if (rc == RC_BLOCK_NOT_FOUND) {
             memset(targetFrame.data, 0, BLOCK_SIZE);  // 新页初始化
@@ -127,7 +95,7 @@ RC MemManager::getPage(TableId tableId, PageNum pageNum, BufferFrame *&frame, Me
     targetFrame.pageNum = pageNum;
     targetFrame.spaceType = spaceType;
     targetFrame.pinCount = 1;
-    targetFrame.refBit = true;  // 修复：用refBit替代isReferenced
+    targetFrame.refBit = true;
     targetFrame.isValid = true;
 
     frame = &targetFrame;
@@ -157,20 +125,29 @@ RC MemManager::markDirty(TableId tableId, PageNum pageNum) {
 }
 
 RC MemManager::flushPage(TableId tableId, PageNum pageNum) {
-    int idx = findFrame(tableId, pageNum);
-    if (idx == -1) {
+    int frameIdx = findFrame(tableId, pageNum);
+    if (frameIdx == -1) {
         return RC_PAGE_NOT_FOUND;
     }
 
-    // 实际实现中应该写入磁盘
-    frames_[idx].isDirty = false;
-    return RC_OK;
+    BufferFrame& frame = frames_[frameIdx];
+    if (!frame.isDirty) {
+        return RC_OK; // 非脏页无需刷新
+    }
+
+    // 将页面数据写入磁盘
+    BlockNum blockNum = pageNum; // 假设页号与块号一致
+    RC rc = diskManager_.writeBlock(blockNum, frame.data);
+    if (rc == RC_OK) {
+        frame.isDirty = false; // 清除脏页标记
+    }
+    return rc;
 }
 
 RC MemManager::flushAllPages() {
     for (auto &frame: frames_) {
         if (frame.isDirty) {
-            // 实际实现中应该写入磁盘
+            diskManager_.writeBlock(frame.pageNum, frame.data);
             frame.isDirty = false;
         }
     }

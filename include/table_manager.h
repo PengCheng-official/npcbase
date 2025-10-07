@@ -32,7 +32,7 @@ public:
      * @param memManager 内存管理器引用
      * @param diskManager 磁盘管理器引用
      */
-    TableManager(DataDict& dataDict, MemManager& memManager, DiskManager& diskManager);
+    TableManager(DataDict &dataDict, DiskManager &diskManager, MemManager &memManager, LogManager &logManager);
     ~TableManager() = default;
 
     /**
@@ -51,28 +51,31 @@ public:
 
     /**
      * 插入记录
+     * @param txId 事务ID
      * @param tableName 表名
      * @param data 记录数据
      * @param length 记录长度
      * @param rid 输出参数，返回记录ID
      */
-    RC insertRecord(const char* tableName, const char* data, int length, RID& rid);
+    RC insertRecord(TransactionId txId, const char *tableName, const char *data, int length, RID &rid);
 
     /**
      * 删除记录
+     * @param txId 事务ID
      * @param tableName 表名
      * @param rid 记录ID
      */
-    RC deleteRecord(const char* tableName, const RID& rid);
+    RC deleteRecord(TransactionId txId, const char *tableName, const RID &rid);
 
     /**
      * 更新记录
+     * @param txId 事务ID
      * @param tableName 表名
      * @param rid 记录ID
      * @param newData 新记录数据
      * @param newLength 新记录长度
      */
-    RC updateRecord(const char* tableName, const RID& rid, const char* newData, int newLength);
+    RC updateRecord(TransactionId txId, const char *tableName, const RID &rid, const char *newData, int newLength);
 
     /**
      * 读取记录
@@ -93,6 +96,7 @@ private:
     DataDict& dataDict_;      // 数据字典引用
     MemManager& memManager_;  // 内存管理器引用
     DiskManager& diskManager_;// 磁盘管理器引用
+    LogManager& logManager_;  // 日志管理器引用
 
     /**
      * 初始化新页面

@@ -34,6 +34,13 @@ typedef int RC;
 #define RC_TABLE_NOT_FOUND 12    // 表不存在
 #define RC_ATTR_NOT_FOUND 13     // 属性不存在
 #define RC_INVALID_OP 14         // 无效操作
+#define RC_IO_ERROR 15           // IO错误
+#define RC_LOG_NOT_FOUND 16      // 日志不存在
+#define RC_LOG_FILE_ERROR 17     // 日志文件错误
+#define RC_LOG_FLUSH_ERROR 18    // 日志刷新错误
+#define RC_INVALID_LSN 19        // 无效LSN
+#define RC_LOG_NOT_FLUSHED 20    // 日志缓冲中
+#define RC_LOG_READ_ERROR 21     // 日志读取错误
 
 // 数据类型枚举
 enum AttrType {
@@ -81,5 +88,15 @@ enum MemSpaceType {
     DATA_SPACE,    // 数据处理缓存区
     LOG_SPACE      // 日志缓存区
 };
+
+// 事务ID类型
+typedef int32_t TransactionId;
+
+// 日志序列号类型（LSN）
+typedef int64_t lsn_t;
+
+// 最大LSN值
+#define MAX_LSN INT64_MAX
+
 
 #endif  // NPCBASE_H

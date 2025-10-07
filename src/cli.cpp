@@ -147,7 +147,7 @@ void CLI::handleInsert(const std::vector<std::string>& args) {
     }
     
     RID rid;
-    RC rc = tableManager_.insertRecord(tableName.c_str(), data.c_str(), data.length(), rid);
+    RC rc = tableManager_.insertRecord(0, tableName.c_str(), data.c_str(), data.length(), rid);
     if (rc == RC_OK) {
         std::cout << "Record inserted with RID: " << rid.pageNum << ":" << rid.slotNum << std::endl;
     } else {
@@ -174,7 +174,7 @@ void CLI::handleDelete(const std::vector<std::string>& args) {
         SlotNum slotNum = std::stoi(ridStr.substr(colonPos + 1));
         RID rid(pageNum, slotNum);
         
-        RC rc = tableManager_.deleteRecord(tableName.c_str(), rid);
+        RC rc = tableManager_.deleteRecord(0, tableName.c_str(), rid);
         if (rc == RC_OK) {
             std::cout << "Record deleted successfully" << std::endl;
         } else {
@@ -206,7 +206,7 @@ void CLI::handleUpdate(const std::vector<std::string>& args) {
         SlotNum slotNum = std::stoi(ridStr.substr(colonPos + 1));
         RID rid(pageNum, slotNum);
         
-        RC rc = tableManager_.updateRecord(tableName.c_str(), rid, newData.c_str(), newData.length());
+        RC rc = tableManager_.updateRecord(0, tableName.c_str(), rid, newData.c_str(), newData.length());
         if (rc == RC_OK) {
             std::cout << "Record updated successfully" << std::endl;
         } else {

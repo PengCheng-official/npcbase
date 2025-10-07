@@ -29,7 +29,7 @@ public:
      * 构造函数
      * @param totalMemSize 总内存大小（字节）
      */
-    MemManager(size_t totalMemSize, DiskManager& diskManager);
+    MemManager(size_t totalMemSize, DiskManager &diskManager);
     ~MemManager();
 
     /**
@@ -78,6 +78,7 @@ public:
      * @param spaceType 内存分区类型
      */
     RC getFreeFrame(BufferFrame *&frame, MemSpaceType spaceType);
+
 
 private:
     size_t totalMemSize_;              // 总内存大小

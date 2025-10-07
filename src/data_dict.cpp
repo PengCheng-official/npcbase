@@ -9,43 +9,40 @@ RC DataDict::init() {
     return RC_OK;
 }
 
-RC DataDict::createTable(const char* tableName, int attrCount, const AttrInfo* attrs, TableId& tableId) {
-    if (tableName == nullptr || attrCount <= 0 || attrCount > MAX_ATTRS_PER_TABLE || attrs == nullptr) {
+RC DataDict::createTable(TransactionId txId, const char* tableName, int attrCount, const AttrInfo* attrs, TableId& tableId) {
+    // 检查参数有效性
+    if (tableName == nullptr || strlen(tableName) >= MAX_TABLE_NAME_LEN ||
+        attrCount <= 0 || attrCount > MAX_ATTRS_PER_TABLE || attrs == nullptr) {
         return RC_INVALID_ARG;
     }
 
-    // 检查表是否已存在
-    for (const auto& table : tables_) {
-        if (strcmp(table.tableName, tableName) == 0) {
-            return RC_TABLE_EXISTS;
-        }
+    // 检查是否已存在同名表
+    TableInfo temp;
+    if (findTable(tableName, temp) == RC_OK) {
+        return RC_TABLE_EXISTS;
     }
 
     // 创建新表信息
     TableInfo table;
     table.tableId = nextTableId_++;
     strncpy(table.tableName, tableName, MAX_TABLE_NAME_LEN - 1);
-    table.tableName[MAX_TABLE_NAME_LEN - 1] = '\0';
     table.attrCount = attrCount;
+    memcpy(table.attrs, attrs, attrCount * sizeof(AttrInfo));
     table.firstPage = -1;
     table.lastPage = -1;
-    table.recordCount = 0;
     table.deletedCount = 0;
-
-    // 复制属性信息
-    for (int i = 0; i < attrCount; i++) {
-        strncpy(table.attrs[i].name, attrs[i].name, MAX_ATTR_NAME_LEN - 1);
-        table.attrs[i].name[MAX_ATTR_NAME_LEN - 1] = '\0';
-        table.attrs[i].type = attrs[i].type;
-        table.attrs[i].length = attrs[i].length;
-    }
+    table.recordCount = 0;
 
     tables_.push_back(table);
     tableId = table.tableId;
+
+    // 记录创建表的日志（需要定义相应的日志类型）
+     logManager_->writeCreateTableLog(txId, tableId, tableName, attrCount, attrs);
+
     return RC_OK;
 }
 
-RC DataDict::dropTable(const char* tableName) {
+RC DataDict::dropTable(TransactionId txId, const char *tableName) {
     if (tableName == nullptr) {
         return RC_INVALID_ARG;
     }
