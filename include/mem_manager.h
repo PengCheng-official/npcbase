@@ -73,11 +73,17 @@ public:
     RC flushAllPages();
 
     /**
+     * 刷新指定内存分区的所有脏页到磁盘
+     * @param spaceType 内存分区类型
+     */
+    RC flushSpace(MemSpaceType spaceType);
+
+    /**
      * 获取空闲缓冲帧（可能需要置换）
      * @param frame 输出参数，返回空闲缓冲帧
      * @param spaceType 内存分区类型
      */
-    RC getFreeFrame(BufferFrame *&frame, MemSpaceType spaceType);
+    RC getFreeFrame(BufferFrame *&frame, PageNum &pageId, MemSpaceType spaceType);
 
 
 private:

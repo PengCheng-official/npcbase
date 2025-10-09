@@ -73,7 +73,7 @@ RC MemManager::getPage(TableId tableId, PageNum pageNum, BufferFrame *&frame, Me
     // 3. 若置换的帧是脏页，先刷盘
     BufferFrame &targetFrame = frames_[frameIdx];
     if (targetFrame.isDirty) {
-        RC rc = diskManager_.writeBlock(targetFrame.pageNum, targetFrame.data);
+        RC rc = diskManager_.writeBlock(targetFrame.tableId, targetFrame.pageNum, targetFrame.data);
         if (rc != RC_OK) {
             return rc;
         }
@@ -81,7 +81,7 @@ RC MemManager::getPage(TableId tableId, PageNum pageNum, BufferFrame *&frame, Me
     }
 
     // 4. 从磁盘读取页面数据
-    RC rc = diskManager_.readBlock(pageNum, targetFrame.data);
+    RC rc = diskManager_.readBlock(targetFrame.tableId, pageNum, targetFrame.data);
     if (rc != RC_OK) {
         if (rc == RC_BLOCK_NOT_FOUND) {
             memset(targetFrame.data, 0, BLOCK_SIZE);  // 新页初始化
@@ -137,7 +137,7 @@ RC MemManager::flushPage(TableId tableId, PageNum pageNum) {
 
     // 将页面数据写入磁盘
     BlockNum blockNum = pageNum; // 假设页号与块号一致
-    RC rc = diskManager_.writeBlock(blockNum, frame.data);
+    RC rc = diskManager_.writeBlock(frame.tableId, blockNum, frame.data);
     if (rc == RC_OK) {
         frame.isDirty = false; // 清除脏页标记
     }
@@ -147,18 +147,29 @@ RC MemManager::flushPage(TableId tableId, PageNum pageNum) {
 RC MemManager::flushAllPages() {
     for (auto &frame: frames_) {
         if (frame.isDirty) {
-            diskManager_.writeBlock(frame.pageNum, frame.data);
+            diskManager_.writeBlock(frame.tableId, frame.pageNum, frame.data);
             frame.isDirty = false;
         }
     }
     return RC_OK;
 }
 
-RC MemManager::getFreeFrame(BufferFrame *&frame, MemSpaceType spaceType) {
+RC MemManager::flushSpace(MemSpaceType spaceType) {
+    for (auto &frame: frames_) {
+        if (frame.isDirty && frame.spaceType == spaceType) {
+            diskManager_.writeBlock(frame.tableId, frame.pageNum, frame.data);
+            frame.isDirty = false;
+        }
+    }
+    return RC_OK;
+}
+
+RC MemManager::getFreeFrame(BufferFrame *&frame, PageNum &pageId, MemSpaceType spaceType) {
     // 先查找未使用的帧
     for (int i = 0; i < totalFrames_; i++) {
         if (frames_[i].pageNum == -1 && frames_[i].spaceType == spaceType && frames_[i].pinCount == 0) {
             frame = &frames_[i];
+            pageId = frame->pageNum;
             return RC_OK;
         }
     }
@@ -175,6 +186,7 @@ RC MemManager::getFreeFrame(BufferFrame *&frame, MemSpaceType spaceType) {
     }
 
     frame = &frames_[replaceIdx];
+    pageId = frame->pageNum;
     return RC_OK;
 }
 

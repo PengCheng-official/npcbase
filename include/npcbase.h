@@ -15,6 +15,7 @@
 #define PLAN_CACHE_PCT 10        // 访问计划占内存比例
 #define DICT_CACHE_PCT 10        // 数据字典占内存比例
 #define LOG_CACHE_PCT 10         // 日志缓存占内存比例
+#define DICT_TABLE_ID 0          // 数据字典表ID
 
 // 返回码定义
 typedef int RC;
@@ -22,25 +23,27 @@ typedef int RC;
 #define RC_OK 0                  // 操作成功
 #define RC_FILE_EXISTS 1         // 文件已存在
 #define RC_FILE_NOT_FOUND 2      // 文件不存在
-#define RC_INVALID_ARG 3         // 无效参数
-#define RC_OUT_OF_MEMORY 4       // 内存不足
-#define RC_OUT_OF_DISK 5         // 磁盘空间不足
-#define RC_BLOCK_NOT_FOUND 6     // 块不存在
-#define RC_PAGE_NOT_FOUND 7      // 页不存在
-#define RC_SLOT_NOT_FOUND 8      // 槽不存在
-#define RC_RECORD_TOO_LONG 9     // 记录过长
-#define RC_BUFFER_FULL 10        // 缓冲池满
-#define RC_TABLE_EXISTS 11       // 表已存在
-#define RC_TABLE_NOT_FOUND 12    // 表不存在
-#define RC_ATTR_NOT_FOUND 13     // 属性不存在
-#define RC_INVALID_OP 14         // 无效操作
-#define RC_IO_ERROR 15           // IO错误
-#define RC_LOG_NOT_FOUND 16      // 日志不存在
-#define RC_LOG_FILE_ERROR 17     // 日志文件错误
-#define RC_LOG_FLUSH_ERROR 18    // 日志刷新错误
-#define RC_INVALID_LSN 19        // 无效LSN
-#define RC_LOG_NOT_FLUSHED 20    // 日志缓冲中
-#define RC_LOG_READ_ERROR 21     // 日志读取错误
+#define RC_FILE_ERROR 3          // 文件错误
+#define RC_INVALID_ARG 4         // 无效参数
+#define RC_OUT_OF_MEMORY 5       // 内存不足
+#define RC_OUT_OF_DISK 6         // 磁盘空间不足
+#define RC_BLOCK_NOT_FOUND 7     // 块不存在
+#define RC_INVALID_BLOCK 8         // 块非法
+#define RC_PAGE_NOT_FOUND 9      // 页不存在
+#define RC_SLOT_NOT_FOUND 10     // 槽不存在
+#define RC_RECORD_TOO_LONG 11    // 记录过长
+#define RC_BUFFER_FULL 12        // 缓冲池满
+#define RC_TABLE_EXISTS 13       // 表已存在
+#define RC_TABLE_NOT_FOUND 14    // 表不存在
+#define RC_ATTR_NOT_FOUND 15     // 属性不存在
+#define RC_INVALID_OP 16         // 无效操作
+#define RC_IO_ERROR 17           // IO错误
+#define RC_LOG_NOT_FOUND 18      // 日志不存在
+#define RC_LOG_FILE_ERROR 19     // 日志文件错误
+#define RC_LOG_FLUSH_ERROR 20    // 日志刷新错误
+#define RC_INVALID_LSN 21        // 无效LSN
+#define RC_LOG_NOT_FLUSHED 22    // 日志缓冲中
+#define RC_LOG_READ_ERROR 23     // 日志读取错误
 
 // 数据类型枚举
 enum AttrType {

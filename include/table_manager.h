@@ -41,7 +41,7 @@ public:
      * @param attrCount 属性数量
      * @param attrs 属性信息数组
      */
-    RC createTable(const char* tableName, int attrCount, const AttrInfo* attrs);
+    RC createTable(TransactionId txId, const char *tableName, int attrCount, const AttrInfo *attrs);
 
     /**
      * 删除表

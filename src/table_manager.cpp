@@ -5,7 +5,7 @@
 TableManager::TableManager(DataDict &dataDict, DiskManager &diskManager, MemManager &memManager, LogManager &logManager)
         : dataDict_(dataDict), memManager_(memManager), diskManager_(diskManager), logManager_(logManager) {}
 
-RC TableManager::createTable(const char *tableName, int attrCount, const AttrInfo *attrs) {
+RC TableManager::createTable(TransactionId txId, const char *tableName, int attrCount, const AttrInfo *attrs) {
     if (tableName == nullptr || attrCount <= 0 || attrCount > MAX_ATTRS_PER_TABLE || attrs == nullptr) {
         return RC_INVALID_ARG;
     }
@@ -23,6 +23,8 @@ RC TableManager::createTable(const char *tableName, int attrCount, const AttrInf
     if (rc != RC_OK) {
         return rc;
     }
+
+    memManager_.flushAllPages();
 
     return RC_OK;
 }
@@ -341,7 +343,7 @@ RC TableManager::findPageForInsert(const TableInfo &tableInfo, int length, PageN
 
     // 需要分配新页面
     BlockNum newBlockNum;
-    RC rc = diskManager_.allocBlock(newBlockNum);
+    RC rc = diskManager_.allocBlock(tableInfo.tableId, newBlockNum);
     if (rc != RC_OK) {
         return rc;
     }
@@ -351,7 +353,7 @@ RC TableManager::findPageForInsert(const TableInfo &tableInfo, int length, PageN
     // 获取新页面并初始化
     rc = memManager_.getPage(tableInfo.tableId, pageNum, frame, DATA_SPACE);
     if (rc != RC_OK) {
-        diskManager_.freeBlock(newBlockNum);
+        diskManager_.freeBlock(tableInfo.tableId, newBlockNum);
         return rc;
     }
 

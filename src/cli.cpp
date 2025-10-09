@@ -85,44 +85,88 @@ void CLI::handleCreateTable(const std::vector<std::string>& args) {
         std::cout << "Usage: create table <table_name> (<attr_name> <type> [<length>], ...)" << std::endl;
         return;
     }
-    
+
     std::string tableName = args[1];
     std::vector<AttrInfo> attrs;
-    
-    // 解析属性列表（简化实现）
-    for (size_t i = 2; i < args.size(); i += 2) {
-        if (i + 1 >= args.size()) break;
-        
-        AttrInfo attr;
-        strncpy(attr.name, args[i].c_str(), MAX_ATTR_NAME_LEN - 1);
-        
-        if (args[i+1] == "int") {
-            attr.type = INT;
-            attr.length = 4;
-        } else if (args[i+1] == "float") {
-            attr.type = FLOAT;
-            attr.length = 4;
-        } else if (args[i+1] == "string") {
-            attr.type = STRING;
-            attr.length = 255;  // 默认长度
-            if (i + 2 < args.size()) {
-                attr.length = std::stoi(args[i+2]);
-                i++;  // 跳过长度参数
+
+    // 辅助函数：清理字符串中的括号和逗号
+    auto cleanSymbol = [](const std::string& s) {
+        std::string res;
+        for (char c : s) {
+            if (c != '(' && c != ')' && c != ',') {
+                res += c;
             }
-        } else {
-            std::cout << "Unknown type: " << args[i+1] << std::endl;
+        }
+        return res;
+    };
+
+    // 解析属性列表（带符号清理）
+    for (size_t i = 2; i < args.size(); ) {
+        // 清理属性名中的符号（可能包含'(', ')'等）
+        std::string attrName = cleanSymbol(args[i]);
+        if (attrName.empty()) {  // 跳过空字符串（纯符号的情况）
+            i++;
+            continue;
+        }
+
+        if (i + 1 >= args.size()) {
+            std::cout << "Missing type for attribute: " << attrName << std::endl;
             return;
         }
-        
+
+        // 清理类型中的符号（可能包含','等）
+        std::string typeStr = cleanSymbol(args[i+1]);
+        if (typeStr.empty()) {
+            std::cout << "Invalid type for attribute: " << attrName << std::endl;
+            return;
+        }
+
+        AttrInfo attr;
+        strncpy(attr.name, attrName.c_str(), MAX_ATTR_NAME_LEN - 1);
+        attr.name[MAX_ATTR_NAME_LEN - 1] = '\0';  // 确保字符串结束符
+
+        // 解析类型
+        if (typeStr == "int") {
+            attr.type = INT;
+            attr.length = 4;
+            i += 2;  // 移动到下一个属性名
+        } else if (typeStr == "float") {
+            attr.type = FLOAT;
+            attr.length = 4;
+            i += 2;
+        } else if (typeStr == "string") {
+            attr.type = STRING;
+            attr.length = 255;  // 默认长度
+            // 检查是否有指定长度
+            if (i + 2 < args.size()) {
+                std::string lenStr = cleanSymbol(args[i+2]);
+                if (!lenStr.empty()) {
+                    try {
+                        attr.length = std::stoi(lenStr);
+                        i += 3;  // 跳过长度参数
+                        continue;
+                    } catch (...) {
+                        std::cout << "Invalid length for string attribute: " << attrName << std::endl;
+                        return;
+                    }
+                }
+            }
+            i += 2;  // 没有指定长度时移动
+        } else {
+            std::cout << "Unknown type: " << typeStr << " for attribute: " << attrName << std::endl;
+            return;
+        }
+
         attrs.push_back(attr);
     }
-    
+
     if (attrs.empty()) {
         std::cout << "No attributes specified for table" << std::endl;
         return;
     }
-    
-    RC rc = tableManager_.createTable(tableName.c_str(), attrs.size(), attrs.data());
+
+    // TODO: 实际应从事务管理器获取txId
+    RC rc = tableManager_.createTable(0, tableName.c_str(), attrs.size(), attrs.data());
     if (rc == RC_OK) {
         std::cout << "Table " << tableName << " created successfully" << std::endl;
     } else if (rc == RC_TABLE_EXISTS) {

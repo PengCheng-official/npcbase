@@ -1,10 +1,12 @@
 #include "../include/disk_manager.h"
 #include <cstring>
 #include <iostream>
+#include <filesystem>
 
-DiskManager::DiskManager(size_t diskSize, const std::string& dbName) 
-    : diskSize_(diskSize), dbName_(dbName), totalBlocks_(0), blockBitmap_(nullptr) {
-    // 计算总块数：磁盘大小 / 块大小
+namespace fs = std::filesystem;
+
+DiskManager::DiskManager(size_t diskSize, const std::string &dbName)
+        : diskSize_(diskSize), dbName_(dbName) {
     totalBlocks_ = diskSize_ / BLOCK_SIZE;
     if (diskSize_ % BLOCK_SIZE != 0) {
         totalBlocks_++;
@@ -12,128 +14,245 @@ DiskManager::DiskManager(size_t diskSize, const std::string& dbName)
 }
 
 DiskManager::~DiskManager() {
-    if (dbFile_.is_open()) {
-        dbFile_.close();
+    // 关闭所有打开的表文件
+    for (auto &[tableId, fs]: tableFiles_) {
+        if (fs.is_open()) {
+            fs.close();
+        }
     }
-    delete[] blockBitmap_;
 }
 
 RC DiskManager::init() {
-    // 计算位图大小（每个块用1位表示）
-    size_t bitmapSize = (totalBlocks_ + 7) / 8;
-    blockBitmap_ = new char[bitmapSize];
-    memset(blockBitmap_, 0, bitmapSize);  // 初始化为0（所有块未分配）
-
-    // 打开或创建数据库文件
-    std::string filename = dbName_ + ".db";
-    dbFile_.open(filename, std::ios::in | std::ios::out | std::ios::binary);
-    
-    if (!dbFile_.is_open()) {
-        // 文件不存在，创建新文件
-        dbFile_.open(filename, std::ios::out | std::ios::binary);
-        if (!dbFile_.is_open()) {
-            return RC_INVALID_OP;
+    // 创建数据库目录（若不存在）
+    try {
+        RC rc = createDbFile(dbName_);
+        if (rc != RC_OK) {
+            return rc;
         }
-        
-        // 初始化文件大小：写入totalBlocks_个空块
-        char buffer[BLOCK_SIZE] = {0};
-        for (int i = 0; i < totalBlocks_; i++) {
-            dbFile_.write(buffer, BLOCK_SIZE);
-        }
-        dbFile_.close();
-        
-        // 重新以读写模式打开
-        dbFile_.open(filename, std::ios::in | std::ios::out | std::ios::binary);
-        if (!dbFile_.is_open()) {
-            return RC_INVALID_OP;
-        }
+    } catch (const std::exception &e) {
+        return RC_FILE_NOT_FOUND;
     }
-    
     return RC_OK;
 }
 
-RC DiskManager::allocBlock(BlockNum& blockNum) {
-    // 查找第一个未分配的块
-    for (int i = 0; i < totalBlocks_; i++) {
-        if (!isBlockAllocated(i)) {
-            // 标记块为已分配
-            size_t byteIdx = i / 8;
-            int bitIdx = i % 8;
-            blockBitmap_[byteIdx] |= (1 << bitIdx);
-            
-            blockNum = i;
-            return RC_OK;
-        }
+RC DiskManager::createDbFile(const std::string dbName) {
+    std::string filePath = dbName + ".db";
+    // 检查文件是否已存在
+    if (fs::exists(filePath)) {
+        return RC_OK;
     }
-    
-    return RC_OUT_OF_DISK;
+
+    // 创建并初始化文件
+    std::fstream fs(filePath, std::ios::out | std::ios::binary);
+    if (!fs.is_open()) {
+        return RC_FILE_ERROR;
+    }
+
+    // 写入文件头（初始1个块，未使用）
+    TableFileHeader header = {1, 0};
+    fs.write(reinterpret_cast<const char *>(&header), sizeof(header));
+
+    // 初始化第一个块（空块）
+    char emptyBlock[BLOCK_SIZE] = {0};
+    fs.write(emptyBlock, BLOCK_SIZE);
+
+    fs.close();
+    return RC_OK;
 }
 
-RC DiskManager::freeBlock(BlockNum blockNum) {
-    if (blockNum < 0 || blockNum >= totalBlocks_) {
+RC DiskManager::createTableFile(TableId tableId) {
+    std::string filePath = getTableFilePath(tableId);
+    // 检查文件是否已存在
+    if (fs::exists(filePath)) {
+        return RC_FILE_EXISTS;
+    }
+
+    // 创建并初始化文件
+    std::fstream fs(filePath, std::ios::out | std::ios::binary);
+    if (!fs.is_open()) {
+        return RC_FILE_ERROR;
+    }
+
+    // 写入文件头（初始1个块，未使用）
+    TableFileHeader header = {1, 0};
+    fs.write(reinterpret_cast<const char *>(&header), sizeof(header));
+
+    // 初始化第一个块（空块）
+    char emptyBlock[BLOCK_SIZE] = {0};
+    fs.write(emptyBlock, BLOCK_SIZE);
+
+    fs.close();
+    return RC_OK;
+}
+
+RC DiskManager::openTableFile(TableId tableId) {
+    // 若已打开则直接返回
+    if (tableFiles_.count(tableId)) {
+        return RC_OK;
+    }
+
+    std::string filePath = getTableFilePath(tableId);
+    std::fstream fs(filePath, std::ios::in | std::ios::out | std::ios::binary);
+    if (!fs.is_open()) {
+        return RC_FILE_NOT_FOUND;
+    }
+
+    tableFiles_[tableId] = std::move(fs);
+    return RC_OK;
+}
+
+RC DiskManager::closeTableFile(TableId tableId) {
+    auto it = tableFiles_.find(tableId);
+    if (it == tableFiles_.end()) {
+        return RC_FILE_ERROR;
+    }
+    if (it->second.is_open()) {
+        it->second.close();
+    }
+    tableFiles_.erase(it);
+    return RC_OK;
+}
+
+RC DiskManager::readTableFileHeader(TableId tableId, TableFileHeader &header) {
+    auto it = tableFiles_.find(tableId);
+    if (it == tableFiles_.end() || !it->second.is_open()) {
+        return RC_FILE_ERROR;
+    }
+
+    // 定位到文件头（文件起始位置）
+    it->second.seekg(0);
+    it->second.read(reinterpret_cast<char *>(&header), sizeof(header));
+    if (it->second.fail()) {
+        return RC_FILE_NOT_FOUND;
+    }
+    return RC_OK;
+}
+
+RC DiskManager::writeTableFileHeader(TableId tableId, const TableFileHeader &header) {
+    auto it = tableFiles_.find(tableId);
+    if (it == tableFiles_.end() || !it->second.is_open()) {
+        return RC_FILE_ERROR;
+    }
+
+    // 定位到文件头
+    it->second.seekp(0);
+    it->second.write(reinterpret_cast<const char *>(&header), sizeof(header));
+    if (it->second.fail()) {
+        return RC_FILE_NOT_FOUND;
+    }
+    return RC_OK;
+}
+
+RC DiskManager::allocBlock(TableId tableId, BlockNum &blockNum) {
+    RC rc = openTableFile(tableId);
+    if (rc != RC_OK) {
+        return rc;
+    }
+
+    TableFileHeader header;
+    rc = readTableFileHeader(tableId, header);
+    if (rc != RC_OK) {
+        return rc;
+    }
+
+    // 分配新块（使用第一个未使用的块号）
+    blockNum = header.usedBlocks;
+    header.usedBlocks++;
+
+    // 若需要扩展文件（已分配块数达到总块数）
+    if (header.usedBlocks >= header.totalBlocks) {
+        // 扩展1个块（实际可按批次扩展）
+        header.totalBlocks++;
+        std::string filePath = getTableFilePath(tableId);
+        std::fstream &fs = tableFiles_[tableId];
+        // 定位到文件末尾并写入空块
+        fs.seekp(0, std::ios::end);
+        char emptyBlock[BLOCK_SIZE] = {0};
+        fs.write(emptyBlock, BLOCK_SIZE);
+        if (fs.fail()) {
+            return RC_FILE_NOT_FOUND;
+        }
+    }
+
+    // 更新文件头
+    return writeTableFileHeader(tableId, header);
+}
+
+RC DiskManager::freeBlock(TableId tableId, BlockNum blockNum) {
+    // 简化实现：仅标记（实际可维护空闲块列表）
+    TableFileHeader header;
+    RC rc = readTableFileHeader(tableId, header);
+    if (rc != RC_OK) {
+        return rc;
+    }
+
+    if (blockNum < 0 || blockNum >= header.usedBlocks) {
+        return RC_INVALID_BLOCK;
+    }
+
+    // 实际实现中应将块号加入空闲列表
+    return RC_OK;
+}
+
+RC DiskManager::readBlock(TableId tableId, BlockNum blockNum, char *data) {
+    if (data == nullptr) {
         return RC_INVALID_ARG;
     }
-    
-    // 标记块为未分配
-    size_t byteIdx = blockNum / 8;
-    int bitIdx = blockNum % 8;
-    blockBitmap_[byteIdx] &= ~(1 << bitIdx);
-    
+
+    RC rc = openTableFile(tableId);
+    if (rc != RC_OK) {
+        return rc;
+    }
+
+    TableFileHeader header;
+    rc = readTableFileHeader(tableId, header);
+    if (rc != RC_OK) {
+        return rc;
+    }
+
+    if (blockNum < 0 || blockNum >= header.usedBlocks) {
+        return RC_INVALID_BLOCK;
+    }
+
+    // 块在文件中的偏移量 = 文件头大小 + 块号 * 块大小
+    size_t offset = sizeof(TableFileHeader) + blockNum * BLOCK_SIZE;
+    std::fstream &fs = tableFiles_[tableId];
+    fs.seekg(offset);
+    fs.read(data, BLOCK_SIZE);
+
+    if (fs.fail()) {
+        return RC_FILE_NOT_FOUND;
+    }
     return RC_OK;
 }
 
-RC DiskManager::readBlock(BlockNum blockNum, char* data) {
-    if (blockNum < 0 || blockNum >= totalBlocks_ || data == nullptr) {
+RC DiskManager::writeBlock(TableId tableId, BlockNum blockNum, const char *data) {
+    if (data == nullptr) {
         return RC_INVALID_ARG;
     }
-    
-    if (!isBlockAllocated(blockNum)) {
-        return RC_BLOCK_NOT_FOUND;
+
+    RC rc = openTableFile(tableId);
+    if (rc != RC_OK) {
+        return rc;
     }
-    
-    // 计算偏移量并读取数据
-    size_t offset = blockToOffset(blockNum);
-    dbFile_.seekg(offset);
-    dbFile_.read(data, BLOCK_SIZE);
-    
-    if (dbFile_.fail()) {
-        return RC_INVALID_OP;
+
+    TableFileHeader header;
+    rc = readTableFileHeader(tableId, header);
+    if (rc != RC_OK) {
+        return rc;
     }
-    
+
+    if (blockNum < 0 || blockNum >= header.usedBlocks) {
+        return RC_INVALID_BLOCK;
+    }
+
+    size_t offset = sizeof(TableFileHeader) + blockNum * BLOCK_SIZE;
+    std::fstream &fs = tableFiles_[tableId];
+    fs.seekp(offset);
+    fs.write(data, BLOCK_SIZE);
+
+    if (fs.fail()) {
+        return RC_FILE_NOT_FOUND;
+    }
     return RC_OK;
-}
-
-RC DiskManager::writeBlock(BlockNum blockNum, const char* data) {
-    if (blockNum < 0 || blockNum >= totalBlocks_ || data == nullptr) {
-        return RC_INVALID_ARG;
-    }
-    
-    if (!isBlockAllocated(blockNum)) {
-        return RC_BLOCK_NOT_FOUND;
-    }
-    
-    // 计算偏移量并写入数据
-    size_t offset = blockToOffset(blockNum);
-    dbFile_.seekp(offset);
-    dbFile_.write(data, BLOCK_SIZE);
-    
-    if (dbFile_.fail()) {
-        return RC_INVALID_OP;
-    }
-    
-    return RC_OK;
-}
-
-bool DiskManager::isBlockAllocated(BlockNum blockNum) {
-    if (blockNum < 0 || blockNum >= totalBlocks_) {
-        return false;
-    }
-    
-    size_t byteIdx = blockNum / 8;
-    int bitIdx = blockNum % 8;
-    return (blockBitmap_[byteIdx] & (1 << bitIdx)) != 0;
-}
-
-size_t DiskManager::blockToOffset(BlockNum blockNum) const {
-    return static_cast<size_t>(blockNum) * BLOCK_SIZE;
 }

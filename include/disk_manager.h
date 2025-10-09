@@ -4,72 +4,107 @@
 #include "npcbase.h"
 #include <string>
 #include <fstream>
+#include <unordered_map>
 
-// 磁盘管理器类
+// 表文件头（每个表文件的第一个块）
+struct TableFileHeader {
+    int totalBlocks;  // 该表文件总块数
+    int usedBlocks;   // 已使用块数
+};
+
+// 磁盘管理器类（一个表一个文件）
 class DiskManager {
 public:
-    /**
-     * 构造函数：初始化磁盘大小和数据库名称
-     * @param diskSize 磁盘大小（字节）
-     * @param dbName 数据库名称
-     */
     DiskManager(size_t diskSize, const std::string& dbName);
     ~DiskManager();
 
     /**
-     * 初始化磁盘（创建/打开文件、初始化位图）
+     * 初始化数据库目录
      */
     RC init();
 
     /**
-     * 分配新块
-     * @param blockNum 输出参数，返回分配的块号
+     * 为数据库创建文件
+     * @param dbName 数据库名称
      */
-    RC allocBlock(BlockNum& blockNum);
+    RC createDbFile(const std::string dbName);
 
     /**
-     * 释放块
+     * 为新表创建文件
+     * @param tableId 表ID
+     */
+    RC createTableFile(TableId tableId);
+
+    /**
+     * 打开已有表文件
+     * @param tableId 表ID
+     */
+    RC openTableFile(TableId tableId);
+
+    /**
+     * 关闭表文件
+     * @param tableId 表ID
+     */
+    RC closeTableFile(TableId tableId);
+
+    /**
+     * 为表分配新块
+     * @param tableId 表ID
+     * @param blockNum 输出参数，返回块号（表内唯一）
+     */
+    RC allocBlock(TableId tableId, BlockNum& blockNum);
+
+    /**
+     * 释放表的块
+     * @param tableId 表ID
      * @param blockNum 块号
      */
-    RC freeBlock(BlockNum blockNum);
+    RC freeBlock(TableId tableId, BlockNum blockNum);
 
     /**
-     * 从块读取数据
+     * 从表的块读取数据
+     * @param tableId 表ID
      * @param blockNum 块号
      * @param data 数据缓冲区
      */
-    RC readBlock(BlockNum blockNum, char* data);
+    RC readBlock(TableId tableId, BlockNum blockNum, char* data);
 
     /**
-     * 向块写入数据
+     * 向表的块写入数据
+     * @param tableId 表ID
      * @param blockNum 块号
      * @param data 数据缓冲区
      */
-    RC writeBlock(BlockNum blockNum, const char* data);
-
-    /**
-     * 获取块数量
-     */
-    int getBlockCount() const { return totalBlocks_; }
-
-    /**
-     * 检查块是否已分配
-     * @param blockNum 块号
-     */
-    bool isBlockAllocated(BlockNum blockNum);
+    RC writeBlock(TableId tableId, BlockNum blockNum, const char* data);
 
 private:
     size_t diskSize_;          // 磁盘大小
     std::string dbName_;       // 数据库名称
-    std::fstream dbFile_;      // 数据库文件流（操作磁盘文件）
     int totalBlocks_;          // 总块数
-    char* blockBitmap_;        // 块分配位图（1位表示1个块的分配状态：1=已分配，0=未分配）
+    // 表ID到文件流的映射（仅打开的文件）
+    std::unordered_map<TableId, std::fstream> tableFiles_;
 
     /**
-     * 计算块在文件中的偏移量
-     * @param blockNum 块号
+     * 获取表文件路径
+     * @param tableId 表ID
      */
-    size_t blockToOffset(BlockNum blockNum) const;
+    std::string getTableFilePath(TableId tableId) const {
+        return dbName_ + std::to_string(tableId) + ".db";
+    }
+
+    /**
+     * 读取表文件头
+     * @param tableId 表ID
+     * @param header 输出参数，文件头
+     */
+    RC readTableFileHeader(TableId tableId, TableFileHeader& header);
+
+    /**
+     * 写入表文件头
+     * @param tableId 表ID
+     * @param header 文件头
+     */
+    RC writeTableFileHeader(TableId tableId, const TableFileHeader& header);
 };
 
 #endif  // DISK_MANAGER_H

@@ -18,16 +18,15 @@ struct TableInfo {
     int recordCount;                     // 记录总数
 };
 
+struct DictPageHeader {
+    int tableCount;  // 该页实际存储的表元数据数量
+};
+
 // 数据字典管理类
 class DataDict {
 public:
-    DataDict() = default;
+    DataDict(MemManager &memManager, LogManager &logManager);
     ~DataDict() = default;
-
-    /**
-     * 设置日志管理器
-     */
-    void setLogManager(LogManager* logManager) { logManager_ = logManager; }
 
     /**
      * 初始化数据字典
@@ -77,10 +76,19 @@ public:
      */
     RC listTables(std::vector<std::string>& tables);
 
+    /**
+     * 将表信息写入数据字典缓存
+     * @param table 表信息
+     */
+    RC writeToDictCache(const TableInfo &table);
+
 private:
     std::vector<TableInfo> tables_;  // 存储所有表信息
     TableId nextTableId_ = 1;        // 下一个可用的表ID
-    LogManager* logManager_;         // 日志管理器指针，防止循环依赖
+    MemManager& memManager_;         // 内存管理器引用
+    LogManager& logManager_;         // 日志管理器引用
+
+    std::unordered_map<TableId, PageNum> tableIdToDictPage_;  // 表ID到数据字典页面的映射
 };
 
 #endif  // DATA_DICT_H

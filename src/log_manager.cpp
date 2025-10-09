@@ -6,7 +6,7 @@
 #include <algorithm>
 
 // 日志文件名常量
-const std::string LOG_FILE_NAME = "redbase.log";
+const std::string LOG_FILE_NAME = "npcbase.log";
 // 日志缓存大小（与块大小一致，便于刷盘）
 const int LOG_BUFFER_SIZE = BLOCK_SIZE;
 
@@ -84,7 +84,7 @@ RC LogManager::init() {
         currentLogBlock_ = offset / BLOCK_SIZE;
     } else {
         // 分配第一个日志块
-        if (diskManager_.allocBlock(currentLogBlock_) != RC_OK) {
+        if (diskManager_.allocBlock(DICT_TABLE_ID, currentLogBlock_) != RC_OK) {
             return RC_OUT_OF_DISK;
         }
     }
@@ -126,7 +126,7 @@ RC LogManager::flushBufferToMemManager() {
 
     // 如果当前没有日志块，分配一个新的
     if (currentLogBlock_ == -1) {
-        if (diskManager_.allocBlock(currentLogBlock_) != RC_OK) {
+        if (diskManager_.allocBlock(DICT_TABLE_ID, currentLogBlock_) != RC_OK) {
             return RC_OUT_OF_DISK;
         }
     }
@@ -159,7 +159,7 @@ RC LogManager::flushBufferToMemManager() {
         memManager_.releasePage(-1, currentLogBlock_);
 
         // 分配新块
-        if (diskManager_.allocBlock(currentLogBlock_) != RC_OK) {
+        if (diskManager_.allocBlock(DICT_TABLE_ID, currentLogBlock_) != RC_OK) {
             return RC_OUT_OF_DISK;
         }
 
@@ -506,7 +506,7 @@ RC LogManager::readLog(lsn_t lsn, char* buffer, int& len) {
 
     // 从磁盘读取包含该日志的块
     char blockBuffer[BLOCK_SIZE];
-    RC rc = diskManager_.readBlock(blockNum, blockBuffer);
+    RC rc = diskManager_.readBlock(DICT_TABLE_ID, blockNum, blockBuffer);
     if (rc != RC_OK) {
         return rc;
     }
@@ -615,43 +615,36 @@ lsn_t LogManager::writeUpdateLog(TransactionId txId, TableId tableId, const RID&
 // 写入创建表日志
 lsn_t LogManager::writeCreateTableLog(TransactionId txId, TableId tableId, const char* tableName,
                                       int attrCount, const AttrInfo* attrs) {
-    // 1. 获取事务最后一条日志的LSN（构建日志链）
-    lsn_t lastLSN = getLastLSN(txId);
-    if (lastLSN == RC_INVALID_LSN && currentLSN_ != 0) { // 允许空事务创建表（首次操作）
-        std::cerr << "Create table log error: Transaction " << txId << " not found" << std::endl;
-        return RC_INVALID_LSN;
-    }
+    // 1. 计算日志长度（包含头部、表信息和属性数组）
+    int logLen = calculateLogLength(LOG_CREATE_TABLE, 0, attrCount * sizeof(AttrInfo));
 
-    // 2. 计算属性数据长度
-    int attrsLen = attrCount * sizeof(AttrInfo);
-    int logLen = calculateLogLength(LOG_CREATE_TABLE, 0, attrsLen);
-
-    // 3. 检查缓存空间，不足则刷新
+    // 2. 检查缓存空间，不足则刷新
     if (bufferPos_ + logLen > bufferSize_) {
         if (flushBufferToMemManager() != RC_OK) {
             return RC_INVALID_LSN;
         }
     }
 
-    // 4. 构造日志记录
+    // 3. 构造日志记录
     CreateTableLog* log = reinterpret_cast<CreateTableLog*>(logBuffer_ + bufferPos_);
     log->header.type = LOG_CREATE_TABLE;
     log->header.txId = txId;
     log->header.lsn = nextLSN();
-    log->header.prevLSN = (lastLSN != RC_INVALID_LSN) ? lastLSN : 0;
+    log->header.prevLSN = 0;  // 忽略事务链，简化为0
     log->header.length = logLen;
+
+    // 填充表元数据
     log->tableId = tableId;
     log->attrCount = attrCount;
     strncpy(log->tableName, tableName, sizeof(log->tableName) - 1);
-    log->tableName[sizeof(log->tableName) - 1] = '\0'; // 确保字符串终止
+    log->tableName[sizeof(log->tableName) - 1] = '\0';  // 确保字符串终止
 
-    // 复制属性信息
-    memcpy(log->attrs, attrs, attrsLen);
+    // 复制属性信息（柔性数组）
+    if (attrCount > 0 && attrs != nullptr) {
+        memcpy(log->attrs, attrs, attrCount * sizeof(AttrInfo));
+    }
 
-    // 5. 更新事务日志链跟踪
-    txLastLSN_[txId] = log->header.lsn;
-
-    // 6. 记录LSN与块和偏移量的映射
+    // 4. 记录LSN与块偏移的映射
     long fileOffset = currentLogBlock_ * BLOCK_SIZE;
     int usedSpace = 0;
     if (logFile_.is_open()) {
@@ -668,7 +661,7 @@ lsn_t LogManager::writeCreateTableLog(TransactionId txId, TableId tableId, const
     }
     lsnBlockMap_[log->header.lsn] = {currentLogBlock_, usedSpace + bufferPos_};
 
-    // 7. 移动缓存指针
+    // 5. 移动缓存指针
     bufferPos_ += logLen;
 
     return log->header.lsn;
