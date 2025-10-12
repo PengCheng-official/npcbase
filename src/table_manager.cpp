@@ -19,12 +19,17 @@ RC TableManager::createTable(TransactionId txId, const char *tableName, int attr
 
     // 创建表并添加到数据字典
     TableId tableId;
-    RC rc = dataDict_.createTable(0, tableName, attrCount, attrs, tableId);
+    RC rc = dataDict_.createTable(txId, tableName, attrCount, attrs, tableId);
     if (rc != RC_OK) {
         return rc;
     }
 
-    memManager_.flushAllPages();
+    // 直接创建数据库文件并写入数据字典
+    rc = diskManager_.createTableFile(tableId);
+    if (rc != RC_OK && rc != RC_FILE_EXISTS) {
+        return rc;
+    }
+    memManager_.flushSpace(DICT_SPACE);
 
     return RC_OK;
 }
@@ -102,11 +107,11 @@ RC TableManager::insertRecord(TransactionId txId, const char *tableName, const c
     // 更新表信息
     dataDict_.updateTableInfo(tableInfo.tableId, pageNum, tableInfo.recordCount);
 
-    // 记录插入日志
-    logManager_.writeInsertLog(txId, tableInfo.tableId, RID(pageNum, slotNum), data, length);
-
     // 标记页面为脏页
     memManager_.markDirty(tableInfo.tableId, pageNum);
+
+    // 记录插入日志
+    logManager_.writeInsertLog(txId, LOG_TABLE_ID, RID(pageNum, slotNum), data, length);
 
     // 设置返回的RID
     rid = RID(pageNum, slotNum);

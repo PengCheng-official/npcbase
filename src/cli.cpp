@@ -2,12 +2,14 @@
 #include <iostream>
 #include <sstream>
 #include <vector>
+#include <limits>
 
-CLI::CLI(TableManager& tableManager) : tableManager_(tableManager) {}
+CLI::CLI(TableManager &tableManager, Test &test) : tableManager_(tableManager), test_(test) {}
 
 void CLI::run() {
-    std::cout << "NPCBase Database CLI" << std::endl;
-    std::cout << "Type 'help' for commands. Type 'exit' to quit." << std::endl;
+    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+    std::cout << "\nNPCBase Database CLI" << std::endl;
+    std::cout << "Type 'help' for commands.\nType 'exit' to quit." << std::endl;
     
     std::string command;
     while (true) {
@@ -51,6 +53,8 @@ std::string CLI::parseCommand(const std::string& command, std::vector<std::strin
 void CLI::executeCommand(const std::string& cmd, const std::vector<std::string>& args) {
     if (cmd == "help") {
         printHelp();
+    } else if (cmd == "test") {  // 处理test命令
+        handleTest(args);
     } else if (cmd == "create" && args.size() >= 2 && args[0] == "table") {
         handleCreateTable(args);
     } else if (cmd == "insert") {
@@ -76,8 +80,23 @@ void CLI::printHelp() {
     std::cout << "  update <table_name> set ... where rid=<page>:<slot> - Update a record" << std::endl;
     std::cout << "  select from <table_name> where rid=<page>:<slot> - Retrieve a record" << std::endl;
     std::cout << "  vacuum <table_name> - Perform garbage collection" << std::endl;
+    std::cout << "  test <task_idx> - Run a test task" << std::endl;
     std::cout << "  help - Show this help message" << std::endl;
     std::cout << "  exit - Quit the CLI" << std::endl;
+}
+
+void CLI::handleTest(const std::vector<std::string> &args) {
+    if (args.size() != 1) {
+        std::cout << "Usage: test <task_idx>" << std::endl;
+        return;
+    }
+
+    if (args[0] == "1") {
+        test_.runTask1();
+    } else {
+        std::cout << "Invalid test number. This task is not available" << std::endl;
+        return;
+    }
 }
 
 void CLI::handleCreateTable(const std::vector<std::string>& args) {
@@ -85,9 +104,6 @@ void CLI::handleCreateTable(const std::vector<std::string>& args) {
         std::cout << "Usage: create table <table_name> (<attr_name> <type> [<length>], ...)" << std::endl;
         return;
     }
-
-    std::string tableName = args[1];
-    std::vector<AttrInfo> attrs;
 
     // 辅助函数：清理字符串中的括号和逗号
     auto cleanSymbol = [](const std::string& s) {
@@ -99,6 +115,9 @@ void CLI::handleCreateTable(const std::vector<std::string>& args) {
         }
         return res;
     };
+
+    std::string tableName = cleanSymbol(args[1]);
+    std::vector<AttrInfo> attrs;
 
     // 解析属性列表（带符号清理）
     for (size_t i = 2; i < args.size(); ) {
@@ -166,7 +185,7 @@ void CLI::handleCreateTable(const std::vector<std::string>& args) {
     }
 
     // TODO: 实际应从事务管理器获取txId
-    RC rc = tableManager_.createTable(0, tableName.c_str(), attrs.size(), attrs.data());
+    RC rc = tableManager_.createTable(1, tableName.c_str(), attrs.size(), attrs.data());
     if (rc == RC_OK) {
         std::cout << "Table " << tableName << " created successfully" << std::endl;
     } else if (rc == RC_TABLE_EXISTS) {

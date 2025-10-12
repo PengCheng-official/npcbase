@@ -12,23 +12,10 @@
 #include <unordered_map>
 #include <vector>
 
-// 日志类型（参考Redbase设计）
-enum LogType {
-    LOG_BEGIN,        // 事务开始
-    LOG_COMMIT,       // 事务提交
-    LOG_ABORT,        // 事务中止
-    LOG_INSERT,       // 插入记录
-    LOG_DELETE,       // 删除记录
-    LOG_UPDATE,       // 更新记录
-    LOG_CREATE_TABLE, // 创建表
-    LOG_DROP_TABLE,   // 删除表
-    LOG_ALTER_TABLE   // 修改表结构
-};
-
 // 日志记录头部（所有日志的公共部分）
 struct LogHeader {
     LogType type;       // 日志类型
-    int length;         // 日志总长度（包括头部）
+    int length;    // 日志长度
     TransactionId txId; // 事务ID
     lsn_t lsn;          // 当前日志序列号
     lsn_t prevLSN;      // 同一事务的前一条日志序列号（日志链关键字段）
@@ -84,6 +71,7 @@ struct DropTableLog {
 };
 
 // 日志管理器类（完整实现日志链和WAL机制）
+// 日志管理器类（完整实现日志链和WAL机制）
 class LogManager {
 public:
     // 构造函数：依赖磁盘管理器和内存管理器
@@ -121,8 +109,11 @@ public:
     // 写入删除表日志，返回当前日志LSN
     lsn_t writeDropTableLog(TransactionId txId, TableId tableId, const char* tableName);
 
-    // 刷新日志到磁盘（默认刷新所有日志）
-    RC flushLog(lsn_t lsn = MAX_LSN);
+    // 刷新所有日志到磁盘（无参数版本）
+    RC flushLog();
+
+    // 刷新指定日志到磁盘
+    RC flushLog(lsn_t lsn);
 
     // 读取指定LSN的日志（用于恢复）
     RC readLog(lsn_t lsn, char* buffer, int& len);
@@ -139,13 +130,10 @@ public:
 private:
     DiskManager& diskManager_;       // 磁盘管理器引用
     MemManager& memManager_;         // 内存管理器引用
-    std::fstream logFile_;           // 日志文件流
-    std::string logFileName_;        // 日志文件名
+    std::string dbName_;             // 数据库名称
     lsn_t currentLSN_;               // 当前日志序列号（全局递增）
     lsn_t lastFlushedLSN_;           // 最后刷新到磁盘的LSN
-    char* logBuffer_;                // 日志缓存
-    int bufferSize_;                 // 日志缓存大小（通常为BLOCK_SIZE）
-    int bufferPos_;                  // 缓存当前写入位置
+    std::unordered_map<BlockNum, int> blockOffsets_;  // 日志块偏移量跟踪
     BlockNum currentLogBlock_;       // 当前日志块号
 
     // 事务日志链跟踪：记录每个事务的最后一条日志LSN
@@ -157,10 +145,23 @@ private:
     // 生成下一个LSN（原子递增）
     lsn_t nextLSN() { return ++currentLSN_; }
 
-    // 将日志缓存写入内存管理器，由其负责刷盘
-    RC flushBufferToMemManager();
+//    // 将日志缓存写入内存管理器，由其负责刷盘
+//    RC flushBufferToMemManager();
 
     // 计算日志记录的总长度（包含头部和数据）
     int calculateLogLength(LogType type, int dataLen = 0, int extraLen = 0);
+
+    // 从内存管理器读取指定日志块
+    RC readLogBlock(BlockNum blockNum, char* data);
+
+    // 检查从磁盘分配新块
+    RC allocLogBlock();
+
+    // 将日志块写入内存管理器
+    RC writeLogBlock(BlockNum blockNum, const char* data);
+
+    // 获取当前日志块的缓冲帧
+    RC getCurrentLogBlock(BufferFrame*& frame);
 };
+
 #endif //NPCBASE_LOG_MANAGER_H

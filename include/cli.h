@@ -2,6 +2,7 @@
 #define CLI_H
 
 #include "table_manager.h"
+#include "test.h"
 #include <string>
 #include <vector>
 
@@ -12,7 +13,7 @@ public:
      * 构造函数
      * @param tableManager 表管理器引用
      */
-    CLI(TableManager& tableManager);
+    CLI(TableManager &tableManager, Test &test);
     ~CLI() = default;
 
     /**
@@ -22,6 +23,7 @@ public:
 
 private:
     TableManager& tableManager_;  // 表管理器引用
+    Test& test_;                  // 测试类引用
 
     /**
      * 解析命令
@@ -42,6 +44,12 @@ private:
      * 打印帮助信息
      */
     void printHelp();
+
+    /**
+     * 处理测试
+     * @param args 命令参数
+     */
+    void handleTest(const std::vector<std::string>& args);
 
     /**
      * 处理创建表命令

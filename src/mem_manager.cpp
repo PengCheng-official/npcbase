@@ -81,10 +81,10 @@ RC MemManager::getPage(TableId tableId, PageNum pageNum, BufferFrame *&frame, Me
     }
 
     // 4. 从磁盘读取页面数据
-    RC rc = diskManager_.readBlock(targetFrame.tableId, pageNum, targetFrame.data);
+    RC rc = diskManager_.readBlock(tableId, pageNum, targetFrame.data);
     if (rc != RC_OK) {
         if (rc == RC_BLOCK_NOT_FOUND) {
-            memset(targetFrame.data, 0, BLOCK_SIZE);  // 新页初始化
+            return RC_PAGE_NOT_FOUND;
         } else {
             return rc;
         }
@@ -145,20 +145,47 @@ RC MemManager::flushPage(TableId tableId, PageNum pageNum) {
 }
 
 RC MemManager::flushAllPages() {
-    for (auto &frame: frames_) {
-        if (frame.isDirty) {
-            diskManager_.writeBlock(frame.tableId, frame.pageNum, frame.data);
-            frame.isDirty = false;
-        }
-    }
+    flushSpace(DICT_SPACE);
+    flushSpace(DATA_SPACE);
+    flushSpace(LOG_SPACE);
     return RC_OK;
 }
 
 RC MemManager::flushSpace(MemSpaceType spaceType) {
-    for (auto &frame: frames_) {
-        if (frame.isDirty && frame.spaceType == spaceType) {
-            diskManager_.writeBlock(frame.tableId, frame.pageNum, frame.data);
-            frame.isDirty = false;
+    if (spaceType == LOG_SPACE) {
+        for (auto &frame: frames_) {
+            if (frame.isDirty && frame.spaceType == spaceType) {
+                RC rc = diskManager_.writeBlock(LOG_TABLE_ID, frame.pageNum, frame.data);
+                if (rc != RC_OK) {
+                    return rc;
+                }
+                frame.isDirty = false;
+            }
+        }
+    }
+    else if (spaceType == PLAN_SPACE) {
+        return RC_OK;
+    }
+    else if (spaceType == DICT_SPACE) {
+        for (auto &frame: frames_) {
+            if (frame.isDirty && frame.spaceType == spaceType) {
+                RC rc = diskManager_.writeBlock(DICT_TABLE_ID, frame.pageNum, frame.data);
+                if (rc != RC_OK) {
+                    return rc;
+                }
+                frame.isDirty = false;
+            }
+        }
+    }
+    else {
+        for (auto &frame: frames_) {
+            if (frame.isDirty && frame.spaceType == spaceType) {
+                RC rc = diskManager_.writeBlock(frame.tableId, frame.pageNum, frame.data);
+                if (rc != RC_OK) {
+                    return rc;
+                }
+                frame.isDirty = false;
+            }
         }
     }
     return RC_OK;

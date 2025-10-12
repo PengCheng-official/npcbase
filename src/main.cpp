@@ -11,7 +11,7 @@
 // 默认配置
 //const size_t DEFAULT_MEM_SIZE = 1024 * 1024;  // 1MB内存
 //const size_t DEFAULT_DISK_SIZE = 10 * 1024 * 1024;  // 10MB磁盘
-const std::string DEFAULT_DB_NAME = "npcbase_db";
+const std::string DEFAULT_DB_NAME = "npcbaseDb";
 
 size_t inputAndAdjustSpaceSize(const std::string& type) {
     size_t inputSize;
@@ -63,7 +63,13 @@ int main(int argc, char* argv[]) {
         std::cerr << "Failed to initialize memory manager: " << rc << std::endl;
         return 1;
     }
-    
+
+    rc = logManager.init();
+    if (rc != RC_OK) {
+        std::cerr << "Failed to initialize log manager: " << rc << std::endl;
+        return 1;
+    }
+
     rc = dataDict.init();
     if (rc != RC_OK) {
         std::cerr << "Failed to initialize data dictionary: " << rc << std::endl;
@@ -74,9 +80,12 @@ int main(int argc, char* argv[]) {
     std::cout << "Memory size: " << memSize << " bytes" << std::endl;
     std::cout << "Disk size: " << diskSize << " bytes" << std::endl;
     std::cout << "Block size: " << BLOCK_SIZE << " bytes" << std::endl;
-    
+
+    // 创建测试
+    Test test(tableManager, memManager, diskManager, dataDict);
+
     // 启动命令行交互
-    CLI cli(tableManager);
+    CLI cli(tableManager, test);
     cli.run();
     
     // 关闭数据库

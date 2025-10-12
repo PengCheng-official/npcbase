@@ -1,6 +1,7 @@
 #include "../include/data_dict.h"
 #include <cstring>
 #include <algorithm>
+#include <iostream>
 
 
 DataDict::DataDict(MemManager &memManager, LogManager &logManager) :
@@ -8,7 +9,7 @@ DataDict::DataDict(MemManager &memManager, LogManager &logManager) :
 }
 
 RC DataDict::init() {
-    // 初始化数据字典，实际实现中可能需要从磁盘加载
+    // 初始化数据字典，需要从磁盘加载
     tables_.clear();
     nextTableId_ = 1;
 

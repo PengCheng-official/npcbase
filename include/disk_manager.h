@@ -6,6 +6,7 @@
 #include <fstream>
 #include <unordered_map>
 
+
 // 表文件头（每个表文件的第一个块）
 struct TableFileHeader {
     int totalBlocks;  // 该表文件总块数
@@ -24,10 +25,11 @@ public:
     RC init();
 
     /**
-     * 为数据库创建文件
-     * @param dbName 数据库名称
+     * 获取数据库名称
      */
-    RC createDbFile(const std::string dbName);
+    std::string getDbName() const {
+        return dbName_;
+    }
 
     /**
      * 为新表创建文件
@@ -77,19 +79,62 @@ public:
      */
     RC writeBlock(TableId tableId, BlockNum blockNum, const char* data);
 
-private:
-    size_t diskSize_;          // 磁盘大小
-    std::string dbName_;       // 数据库名称
-    int totalBlocks_;          // 总块数
-    // 表ID到文件流的映射（仅打开的文件）
-    std::unordered_map<TableId, std::fstream> tableFiles_;
+    /**
+     * 为新日志创建文件
+     */
+    RC createLogFile();
+//
+//    /**
+//     * 打开已有日志文件
+//     */
+//    RC openLogFile();
+//
+//    /**
+//     * 关闭日志文件
+//     */
+//    RC closeLogFile();
+//
+//    /**
+//     * 为日志分配新块
+//     * @param blockNum 输出参数，返回块号（表内唯一）
+//     */
+//    RC allocLogBlock(BlockNum& blockNum);
+//
+//    /**
+//     * 释放日志的块
+//     * @param blockNum 块号
+//     */
+//    RC freeLogBlock(BlockNum blockNum);
+//
+//    /**
+//     * 从日志的块读取数据
+//     * @param blockNum 块号
+//     * @param data 数据缓冲区
+//     */
+//    RC readLogBlock(BlockNum blockNum, char* data);
+//
+//    /**
+//     * 向日志的块写入数据
+//     * @param blockNum 块号
+//     * @param data 数据缓冲区
+//     */
+//    RC writeLogBlock(BlockNum blockNum, const char* data);
+
 
     /**
      * 获取表文件路径
      * @param tableId 表ID
      */
-    std::string getTableFilePath(TableId tableId) const {
-        return dbName_ + std::to_string(tableId) + ".db";
+    std::string getFilePath(TableId tableId) const {
+        if (tableId == LOG_TABLE_ID) {
+            return dbName_ + ".log";
+        }
+        else if (tableId == PLAN_TABLE_ID) {
+            return "";
+        }
+        else {
+            return dbName_ + std::to_string(tableId) + ".db";
+        }
     }
 
     /**
@@ -99,12 +144,31 @@ private:
      */
     RC readTableFileHeader(TableId tableId, TableFileHeader& header);
 
+//    /**
+//     * 读取日志文件头
+//     * @param header 输出参数，日志文件头
+//     */
+//    RC readLogFileHeader(TableFileHeader &header);
+
     /**
      * 写入表文件头
      * @param tableId 表ID
      * @param header 文件头
      */
     RC writeTableFileHeader(TableId tableId, const TableFileHeader& header);
+
+//    /**
+//     * 写入日志文件头
+//     * @param header 文件头
+//     */
+//    RC writeLogFileHeader(const TableFileHeader &header);
+
+private:
+    size_t diskSize_;          // 磁盘大小
+    std::string dbName_;       // 数据库名称
+    int totalBlocks_;          // 总块数
+    // 表ID到文件流的映射（仅打开的文件）
+    std::unordered_map<TableId, std::fstream> tableFiles_;
 };
 
 #endif  // DISK_MANAGER_H

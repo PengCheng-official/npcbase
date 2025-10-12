@@ -16,6 +16,8 @@
 #define DICT_CACHE_PCT 10        // 数据字典占内存比例
 #define LOG_CACHE_PCT 10         // 日志缓存占内存比例
 #define DICT_TABLE_ID 0          // 数据字典表ID
+#define LOG_TABLE_ID (-1)        // 数据字典表ID
+#define PLAN_TABLE_ID (-2)       // 数据字典表ID
 
 // 返回码定义
 typedef int RC;
@@ -28,7 +30,7 @@ typedef int RC;
 #define RC_OUT_OF_MEMORY 5       // 内存不足
 #define RC_OUT_OF_DISK 6         // 磁盘空间不足
 #define RC_BLOCK_NOT_FOUND 7     // 块不存在
-#define RC_INVALID_BLOCK 8         // 块非法
+#define RC_INVALID_BLOCK 8       // 块非法
 #define RC_PAGE_NOT_FOUND 9      // 页不存在
 #define RC_SLOT_NOT_FOUND 10     // 槽不存在
 #define RC_RECORD_TOO_LONG 11    // 记录过长
@@ -52,6 +54,27 @@ enum AttrType {
     STRING      // 字符串类型
 };
 
+// 日志类型（参考Redbase设计）
+enum LogType {
+    LOG_BEGIN,        // 事务开始
+    LOG_COMMIT,       // 事务提交
+    LOG_ABORT,        // 事务中止
+    LOG_INSERT,       // 插入记录
+    LOG_DELETE,       // 删除记录
+    LOG_UPDATE,       // 更新记录
+    LOG_CREATE_TABLE, // 创建表
+    LOG_DROP_TABLE,   // 删除表
+    LOG_ALTER_TABLE   // 修改表结构
+};
+
+// 内存分区类型
+enum MemSpaceType {
+    PLAN_SPACE,    // 访问计划区
+    DICT_SPACE,    // 数据字典区
+    DATA_SPACE,    // 数据处理缓存区
+    LOG_SPACE      // 日志缓存区
+};
+
 // 页号类型
 typedef int32_t PageNum;
 
@@ -63,6 +86,12 @@ typedef int32_t BlockNum;
 
 // 表ID类型
 typedef int32_t TableId;
+
+// 事务ID类型
+typedef int32_t TransactionId;
+
+// 日志序列号类型（LSN）
+typedef int64_t lsn_t;
 
 // 属性信息结构体
 struct AttrInfo {
@@ -83,20 +112,6 @@ struct RID {
         return pageNum == other.pageNum && slotNum == other.slotNum;
     }
 };
-
-// 内存分区类型
-enum MemSpaceType {
-    PLAN_SPACE,    // 访问计划区
-    DICT_SPACE,    // 数据字典区
-    DATA_SPACE,    // 数据处理缓存区
-    LOG_SPACE      // 日志缓存区
-};
-
-// 事务ID类型
-typedef int32_t TransactionId;
-
-// 日志序列号类型（LSN）
-typedef int64_t lsn_t;
 
 // 最大LSN值
 #define MAX_LSN INT64_MAX
