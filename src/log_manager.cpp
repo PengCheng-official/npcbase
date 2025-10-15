@@ -74,14 +74,10 @@ RC LogManager::init() {
 
     // 如果有日志，设置当前日志块
     if (offset > 0) {
-        currentLogBlock_ = offset / BLOCK_SIZE;
+        currentLogBlock_ = blockNum;
     } else {
         // 分配第一个日志块
-        rc = diskManager_.allocBlock(LOG_TABLE_ID, currentLogBlock_);
-        if (rc != RC_OK) {
-            return rc;
-        }
-        blockOffsets_[currentLogBlock_] = 0;
+        allocLogBlock();
     }
 
     lastFlushedLSN_ = currentLSN_; // 已存在的日志都是已刷盘的

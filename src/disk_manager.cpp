@@ -131,7 +131,6 @@ RC DiskManager::allocBlock(TableId tableId, BlockNum &blockNum) {
     TableFileHeader header;
     rc = readTableFileHeader(tableId, header);
     if (rc != RC_OK) {
-        std::cerr << "readTableFileHeader " << rc << std::endl;
         return rc;
     }
 
@@ -200,7 +199,6 @@ RC DiskManager::readBlock(TableId tableId, BlockNum blockNum, char *data) {
     fs.read(data, BLOCK_SIZE);
 
     if (fs.fail()) {
-        std::cerr << "fs fail!!!! "  << blockNum << std::endl;
         return RC_FILE_NOT_FOUND;
     }
     return RC_OK;

@@ -93,6 +93,8 @@ void CLI::handleTest(const std::vector<std::string> &args) {
 
     if (args[0] == "1") {
         test_.runTask1();
+    } else if (args[0] == "2") {
+        test_.runTask2();
     } else {
         std::cout << "Invalid test number. This task is not available" << std::endl;
         return;

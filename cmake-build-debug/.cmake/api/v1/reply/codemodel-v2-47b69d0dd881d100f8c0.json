@@ -39,7 +39,7 @@
 				{
 					"directoryIndex" : 0,
 					"id" : "NpcBase::@6890427a1f51a3e7e1df",
-					"jsonFile" : "target-NpcBase-Debug-4c474b9395422500a037.json",
+					"jsonFile" : "target-NpcBase-Debug-b09b67d5e247024f7bb0.json",
 					"name" : "NpcBase",
 					"projectIndex" : 0
 				}
@@ -55,6 +55,6 @@
 	"version" : 
 	{
 		"major" : 2,
-		"minor" : 6
+		"minor" : 8
 	}
 }

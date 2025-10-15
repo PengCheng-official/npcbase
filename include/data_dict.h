@@ -25,7 +25,7 @@ struct DictPageHeader {
 // 数据字典管理类
 class DataDict {
 public:
-    DataDict(MemManager &memManager, LogManager &logManager);
+    DataDict(DiskManager &diskManager, MemManager &memManager, LogManager &logManager);
     ~DataDict() = default;
 
     /**
@@ -85,8 +85,11 @@ public:
 private:
     std::vector<TableInfo> tables_;  // 存储所有表信息
     TableId nextTableId_ = 1;        // 下一个可用的表ID
+    DiskManager& diskManager_;       // 磁盘管理器引用
     MemManager& memManager_;         // 内存管理器引用
     LogManager& logManager_;         // 日志管理器引用
+    std::unordered_map<BlockNum, int> blockOffsets_;  // 日志块偏移量跟踪
+    BlockNum currentLogBlock_;       // 当前日志块号
 
     std::unordered_map<TableId, PageNum> tableIdToDictPage_;  // 表ID到数据字典页面的映射
 };

@@ -46,7 +46,7 @@ int main(int argc, char* argv[]) {
     DiskManager diskManager(diskSize, dbName);
     MemManager memManager(memSize, diskManager);
     LogManager logManager(diskManager, memManager);
-    DataDict dataDict(memManager, logManager);
+    DataDict dataDict(diskManager, memManager, logManager);
 
     // 初始化表管理器（集成索引和事务支持）
     TableManager tableManager(dataDict, diskManager, memManager, logManager);

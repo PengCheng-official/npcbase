@@ -85,8 +85,6 @@ public:
      */
     RC getFreeFrame(BufferFrame *&frame, PageNum &pageId, MemSpaceType spaceType);
 
-
-private:
     size_t totalMemSize_;              // 总内存大小
     size_t planCacheSize_;             // 访问计划区大小
     size_t dictCacheSize_;             // 数据字典区大小
@@ -102,6 +100,7 @@ private:
     std::vector<BufferFrame> frames_;  // 缓冲帧数组
     int clockHand_;                    // CLOCK算法指针
 
+private:
     DiskManager& diskManager_;
 
     /**

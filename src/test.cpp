@@ -4,7 +4,6 @@
 
 #include "../include/test.h"
 #include <iostream>
-#include <cstring>
 
 Test::Test(TableManager& tableManager, MemManager& memManager,
            DiskManager& diskManager, DataDict& dataDict)
@@ -57,6 +56,41 @@ RC Test::runTask1() {
     showDiskAllocation();
 
     std::cout << "\n===== Task 1 Test Completed =====" << std::endl;
+    return RC_OK;
+}
+
+
+RC Test::runTask2() {
+    std::cout << "\n===== Starting Task 2 Test =====" << std::endl;
+    std::cout << "Testing memory management: partitions and content verification" << std::endl;
+
+    // 1. 初始内存状态检查
+    std::cout << "\n[Step 1] Initial memory partition status:" << std::endl;
+    showMemoryPartitions();
+    showAllPartitionDetails();
+
+    // 2. 生成各类内存数据
+    std::cout << "\n[Step 2] Generating memory data..." << std::endl;
+
+    // 创建表操作会更新数据字典（DICT_SPACE）
+    RC rc = createTestTables();
+    if (rc != RC_OK) {
+        std::cerr << "Failed to create test tables: " << rc << std::endl;
+        return rc;
+    }
+
+    // 插入数据会使用数据缓存（DATA_SPACE）
+    rc = insertTestData("test_table_1", 1000);
+    if (rc != RC_OK) {
+        std::cerr << "Failed to insert data: " << rc << std::endl;
+        return rc;
+    }
+
+    // 3. 生成数据后的内存状态检查
+    std::cout << "\n[Step 3] Memory status after data generation:" << std::endl;
+    showAllPartitionDetails();
+
+    std::cout << "\n===== Task 2 Test Completed =====" << std::endl;
     return RC_OK;
 }
 
@@ -150,4 +184,49 @@ void Test::showDiskAllocation() {
             }
         }
     }
+}
+
+void Test::showMemoryPartitions() {
+    std::cout << "Memory partitions overview:" << std::endl;
+    std::cout << "  PLAN_SPACE: " << memManager_.planFrames_ << " frames ("
+              << memManager_.planCacheSize_ << " bytes)" << std::endl;
+    std::cout << "  DICT_SPACE: " << memManager_.dictFrames_ << " frames ("
+              << memManager_.dictCacheSize_ << " bytes)" << std::endl;
+    std::cout << "  DATA_SPACE: " << memManager_.dataFrames_ << " frames ("
+              << memManager_.dataCacheSize_ << " bytes)" << std::endl;
+    std::cout << "  LOG_SPACE: " << memManager_.logFrames_ << " frames ("
+              << memManager_.logCacheSize_ << " bytes)" << std::endl;
+}
+
+void Test::showPartitionDetails(MemSpaceType type, const std::string &name) {
+    std::cout << "\nDetailed info for " << name << ":" << std::endl;
+    int usedFrames = 0;
+    int dirtyFrames = 0;
+
+    for (const auto& frame : memManager_.frames_) {
+        if (frame.spaceType == type && frame.pageNum != -1) {
+            usedFrames++;
+            if (frame.isDirty) dirtyFrames++;
+
+            std::cout << "  Frame (table: " << frame.tableId
+                      << ", page: " << frame.pageNum
+                      << ", pin: " << frame.pinCount
+                      << ", dirty: " << (frame.isDirty ? "yes" : "no")
+                      << ", ref: " << (frame.refBit ? "yes" : "no") << ")" << std::endl;
+        }
+    }
+
+    std::cout << "  Summary: " << usedFrames << " used frames ("
+              << dirtyFrames << " dirty) out of "
+              << (type == PLAN_SPACE ? memManager_.planFrames_ :
+                  type == DICT_SPACE ? memManager_.dictFrames_ :
+                  type == DATA_SPACE ? memManager_.dataFrames_ :
+                  memManager_.logFrames_) << " total frames" << std::endl;
+}
+
+void Test::showAllPartitionDetails() {
+    showPartitionDetails(PLAN_SPACE, "Access Plans");
+    showPartitionDetails(DICT_SPACE, "Data Dictionary");
+    showPartitionDetails(DATA_SPACE, "Data Cache");
+    showPartitionDetails(LOG_SPACE, "Log Cache");
 }

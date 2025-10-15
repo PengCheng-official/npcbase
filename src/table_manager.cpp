@@ -24,13 +24,6 @@ RC TableManager::createTable(TransactionId txId, const char *tableName, int attr
         return rc;
     }
 
-    // 直接创建数据库文件并写入数据字典
-    rc = diskManager_.createTableFile(tableId);
-    if (rc != RC_OK && rc != RC_FILE_EXISTS) {
-        return rc;
-    }
-    memManager_.flushSpace(DICT_SPACE);
-
     return RC_OK;
 }
 

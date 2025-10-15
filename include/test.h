@@ -20,6 +20,9 @@ public:
     // 执行任务一测试
     RC runTask1();
 
+    // 执行任务二测试
+    RC runTask2();
+
 private:
     TableManager& tableManager_;
     MemManager& memManager_;
@@ -44,6 +47,15 @@ private:
 
     // 展示磁盘分配
     void showDiskAllocation();
+
+    // 显示内存分区
+    void showMemoryPartitions();
+
+    // 显示所有分区详情
+    void showAllPartitionDetails();
+
+    // 显示分区详情
+    void showPartitionDetails(MemSpaceType type, const std::string& name);
 };
 
 #endif //NPCBASE_TEST_H

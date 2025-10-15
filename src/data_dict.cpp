@@ -4,8 +4,10 @@
 #include <iostream>
 
 
-DataDict::DataDict(MemManager &memManager, LogManager &logManager) :
-        memManager_(memManager), logManager_(logManager) {
+DataDict::DataDict(DiskManager &diskManager, MemManager &memManager, LogManager &logManager) :
+        diskManager_(diskManager), memManager_(memManager), logManager_(logManager),
+        currentLogBlock_(-1)
+{
 }
 
 RC DataDict::init() {
@@ -14,41 +16,54 @@ RC DataDict::init() {
     nextTableId_ = 1;
 
     // 从磁盘加载元数据到内存
-    PageNum dictPage = 0;
-    BufferFrame *frame = nullptr;
+    BlockNum blockNum = 0;
+    char blockData[BLOCK_SIZE];
+    long offset = 0;
+    int blockOffset = 0;
     while (true) {
-        RC rc = memManager_.getPage(DICT_TABLE_ID, dictPage, frame, DICT_SPACE);
-        if (rc == RC_PAGE_NOT_FOUND) {
-            break; // 无更多元数据页
-        }
+        RC rc = diskManager_.readBlock(LOG_TABLE_ID, blockNum, blockData);
         if (rc != RC_OK) {
-            return rc; // 加载失败
+            break; // 没有更多块了
         }
-
-        DictPageHeader *pageHeader = reinterpret_cast<DictPageHeader*>(frame->data);
-        size_t maxTablePerPage = (BLOCK_SIZE - sizeof(DictPageHeader)) / sizeof(TableInfo);
 
         // 解析页中存储的TableInfo
-        int actualCount = std::min(pageHeader->tableCount, (int)maxTablePerPage);
-        if (actualCount < 0 || actualCount > (int)maxTablePerPage) {
-            actualCount = 0; // 无效计数时视为空页
-        }
-
-        TableInfo *table = reinterpret_cast<TableInfo*>(frame->data + sizeof(DictPageHeader));
-        for (int i = 0; i < actualCount; i++) {
-            if (table->tableId == 0) {
-                break; // 未使用的槽位
+        blockOffset = 0;
+        while (blockOffset + sizeof(DictPageHeader) <= BLOCK_SIZE) {
+            DictPageHeader *header = reinterpret_cast<DictPageHeader *>(blockData + blockOffset);
+            if (header->tableCount <= 0 || blockOffset + header->tableCount > BLOCK_SIZE) {
+                break; // 无效或超出块大小，停止解析
             }
-            tables_.push_back(*table);
-            tableIdToDictPage_[table->tableId] = dictPage;
-            if (table->tableId >= nextTableId_) {
-                nextTableId_ = table->tableId + 1; // 更新下一个可用ID
-            }
-            table++;
-        }
 
-        memManager_.releasePage(DICT_TABLE_ID, dictPage);
-        dictPage++;
+            TableInfo *table = reinterpret_cast<TableInfo*>(blockOffset + sizeof(DictPageHeader));
+            for (int i = 0; i < header->tableCount; i++) {
+                if (table->tableId == 0) {
+                    break; // 未使用的槽位
+                }
+                tables_.push_back(*table);
+                tableIdToDictPage_[table->tableId] = blockNum;
+                if (table->tableId >= nextTableId_) {
+                    nextTableId_ = table->tableId + 1; // 更新下一个可用ID
+                }
+                table++;
+                blockOffset += sizeof(TableInfo) + sizeof(DictPageHeader);
+                offset += sizeof(TableInfo) + sizeof(DictPageHeader);
+            }
+        }
+        blockOffsets_[blockNum] = blockOffset;
+        blockNum++;
+    }
+
+    // 如果有表，设置当前表块
+    if (offset > 0) {
+        currentLogBlock_ = blockNum;
+    } else {
+        // 分配第一个日志块
+        BlockNum newBlock;
+        if (diskManager_.allocBlock(DICT_TABLE_ID, newBlock) != RC_OK) {
+            return RC_INVALID_BLOCK;
+        }
+        currentLogBlock_ = newBlock;
+        blockOffsets_[currentLogBlock_] = 0;
     }
 
     return RC_OK;
@@ -80,8 +95,13 @@ RC DataDict::createTable(TransactionId txId, const char *tableName, int attrCoun
     table.deletedCount = 0;
     table.recordCount = 0;
 
-    // 4. 将元数据写入内存管理器的数据字典缓存区
-    RC rc = writeToDictCache(table);
+    // 4. 创建文件并将元数据写入内存管理器的数据字典缓存区
+    RC rc = diskManager_.createTableFile(table.tableId);
+    if (rc != RC_OK && rc != RC_FILE_EXISTS) {
+        return rc;
+    }
+
+    rc = writeToDictCache(table);
     if (rc != RC_OK) {
         // 写入失败回滚内存状态
         nextTableId_--;
@@ -101,42 +121,39 @@ RC DataDict::createTable(TransactionId txId, const char *tableName, int attrCoun
 RC DataDict::writeToDictCache(const TableInfo &table) {
     // 在DICT_SPACE分区分配缓冲帧存储元数据
     BufferFrame *frame = nullptr;
-    PageNum dictPage; // 元数据页编号（可动态分配或固定）
-    RC rc = memManager_.getFreeFrame(frame, dictPage, DICT_SPACE);
+    RC rc = memManager_.getPage(DICT_TABLE_ID, currentLogBlock_, frame, DICT_SPACE);
     if (rc != RC_OK) {
-        return rc; // 分配失败
+        return rc;
     }
 
-    // 计算当前页可存储的最大表数量
-    size_t maxTablePerPage = (BLOCK_SIZE - sizeof(DictPageHeader)) / sizeof(TableInfo);
-    DictPageHeader *header = reinterpret_cast<DictPageHeader*>(frame->data);
+    // 是否需要分配新页
+    if (currentLogBlock_ == -1 || (blockOffsets_[currentLogBlock_] + sizeof(table) > BLOCK_SIZE)) {
+        // 尝试刷新日志分区获取空间
+        if (memManager_.flushSpace(DICT_SPACE) != RC_OK) {
+            return RC_INVALID_LSN;
+        }
 
-    // 初始化新页的页头（如果是新分配的页）
-    if (header->tableCount < 0 || header->tableCount > maxTablePerPage) {
-        header->tableCount = 0; // 首次使用的页初始化计数
+        // 分配新日志块
+        BlockNum newBlock;
+        if (diskManager_.allocBlock(DICT_TABLE_ID, newBlock) != RC_OK) {
+            return RC_INVALID_LSN;
+        }
+        currentLogBlock_ = newBlock;
+        blockOffsets_[currentLogBlock_] = 0;
     }
 
-    // 检查页是否还有空间
-    if (header->tableCount >= maxTablePerPage) {
-        memManager_.releasePage(DICT_TABLE_ID, dictPage);
-        return RC_OUT_OF_MEMORY; // 页已满，需要处理
-    }
+    // 写入内存
+    int offset = blockOffsets_[currentLogBlock_];
+    TableInfo *tableInfo = reinterpret_cast<TableInfo *>(frame->data + offset);
+    *tableInfo = table;
 
-    // 计算新表项的存储位置
-    TableInfo *tableEntry = reinterpret_cast<TableInfo*>(
-            frame->data + sizeof(DictPageHeader) + header->tableCount * sizeof(TableInfo)
-    );
-
-    // 复制表信息到页中
-    *tableEntry = table;
-    header->tableCount++; // 关键修复：更新页内表数量
-
-    // 标记为脏页并设置pinCount
-    frame->isDirty = true;
-    frame->pinCount = 1;
+    // 更新块偏移并标记脏页
+    blockOffsets_[currentLogBlock_] += sizeof(TableInfo);
+    memManager_.markDirty(DICT_TABLE_ID, currentLogBlock_);
+    memManager_.releasePage(DICT_TABLE_ID, currentLogBlock_);
 
     // 记录表ID与元数据页的映射
-    tableIdToDictPage_[table.tableId] = dictPage;
+    tableIdToDictPage_[table.tableId] = currentLogBlock_;
 
     return RC_OK;
 }
