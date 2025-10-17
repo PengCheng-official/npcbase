@@ -9,7 +9,7 @@
 #include <limits>
 
 // 默认配置
-//const size_t DEFAULT_MEM_SIZE = 1024 * 1024;  // 1MB内存
+//const size_t DEFAULT_MEM_SIZE = 2 * 1024 * 1024;  // 2MB内存
 //const size_t DEFAULT_DISK_SIZE = 10 * 1024 * 1024;  // 10MB磁盘
 const std::string DEFAULT_DB_NAME = "npcbaseDb";
 

@@ -140,7 +140,7 @@ RC DiskManager::allocBlock(TableId tableId, BlockNum &blockNum) {
 
     // 若需要扩展文件（已分配块数达到总块数）
     if (header.usedBlocks >= header.totalBlocks) {
-        // 扩展1个块（实际可按批次扩展）
+        // 扩展1个块
         header.totalBlocks++;
         std::string filePath = getFilePath(tableId);
         std::fstream &fs = tableFiles_[tableId];

@@ -128,11 +128,6 @@ RC DataDict::writeToDictCache(const TableInfo &table) {
 
     // 是否需要分配新页
     if (currentLogBlock_ == -1 || (blockOffsets_[currentLogBlock_] + sizeof(table) > BLOCK_SIZE)) {
-        // 尝试刷新日志分区获取空间
-        if (memManager_.flushSpace(DICT_SPACE) != RC_OK) {
-            return RC_INVALID_LSN;
-        }
-
         // 分配新日志块
         BlockNum newBlock;
         if (diskManager_.allocBlock(DICT_TABLE_ID, newBlock) != RC_OK) {
@@ -188,7 +183,7 @@ RC DataDict::findTable(const char *tableName, TableInfo &tableInfo) {
         }
     }
 
-    // 2. 内存未找到，查磁盘元数据页
+    // 2. 内存未找到，查缓冲区的元数据页
     for (const auto &[tableId, dictPage] : tableIdToDictPage_) {
         BufferFrame *frame = nullptr;
         RC rc = memManager_.getPage(DICT_TABLE_ID, dictPage, frame, DICT_SPACE);
