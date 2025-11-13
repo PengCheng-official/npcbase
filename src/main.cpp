@@ -4,6 +4,7 @@
 #include "../include/disk_manager.h"
 #include "../include/table_manager.h"
 #include "../include/log_manager.h"
+#include "../include/index_manager.h"
 #include "../include/cli.h"
 #include <iostream>
 #include <limits>
@@ -48,9 +49,6 @@ int main(int argc, char* argv[]) {
     LogManager logManager(diskManager, memManager);
     DataDict dataDict(diskManager, memManager, logManager);
 
-    // 初始化表管理器（集成索引和事务支持）
-    TableManager tableManager(dataDict, diskManager, memManager, logManager);
-
     // 初始化数据库
     RC rc = diskManager.init();
     if (rc != RC_OK) {
@@ -75,17 +73,22 @@ int main(int argc, char* argv[]) {
         std::cerr << "Failed to initialize data dictionary: " << rc << std::endl;
         return 1;
     }
-    
+
+    // 构建索引管理器并与表管理器集成
+    IndexManager indexManager(dataDict, diskManager, memManager, logManager);
+    // 初始化表管理器（集成索引和事务支持）
+    TableManager tableManager(dataDict, diskManager, memManager, logManager, indexManager);
+
     std::cout << "Database initialized successfully." << std::endl;
     std::cout << "Memory size: " << memSize << " bytes" << std::endl;
     std::cout << "Disk size: " << diskSize << " bytes" << std::endl;
     std::cout << "Block size: " << BLOCK_SIZE << " bytes" << std::endl;
 
     // 创建测试
-    Test test(tableManager, memManager, diskManager, dataDict);
+    Test test(tableManager, memManager, diskManager, dataDict, indexManager);
 
     // 启动命令行交互
-    CLI cli(tableManager, test);
+    CLI cli(tableManager, test, indexManager);
     cli.run();
     
     // 关闭数据库

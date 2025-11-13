@@ -12,10 +12,12 @@
 #include <string>
 #include <vector>
 
+class IndexManager; // forward declaration
+
 class Test {
 public:
     Test(TableManager& tableManager, MemManager& memManager,
-         DiskManager& diskManager, DataDict& dataDict);
+         DiskManager& diskManager, DataDict& dataDict, IndexManager& indexManager);
 
     // 执行任务一测试
     RC runTask1();
@@ -23,11 +25,15 @@ public:
     // 执行任务二测试
     RC runTask2();
 
+    // 执行任务三测试：索引生成/插入/修改/删除
+    RC runTask3();
+
 private:
     TableManager& tableManager_;
     MemManager& memManager_;
     DiskManager& diskManager_;
     DataDict& dataDict_;
+    IndexManager& indexManager_;
     const std::vector<std::string> testTables_ = {
             "test_table_1", "test_table_2", "test_table_3",
             "test_table_4", "test_table_5"

@@ -16,8 +16,9 @@
 #define DICT_CACHE_PCT 10        // 数据字典占内存比例
 #define LOG_CACHE_PCT 10         // 日志缓存占内存比例
 #define DICT_TABLE_ID 0          // 数据字典表ID
-#define LOG_TABLE_ID (-1)        // 数据字典表ID
-#define PLAN_TABLE_ID (-2)       // 数据字典表ID
+#define LOG_TABLE_ID (-1)        // 日志表ID
+#define PLAN_TABLE_ID (-2)       // 访问计划表ID
+#define INDEX_META_TABLE_ID (-3) // 索引元数据表ID（sys_indexes），独立文件
 
 // 返回码定义
 typedef int RC;

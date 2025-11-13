@@ -3,6 +3,7 @@
 
 #include "table_manager.h"
 #include "test.h"
+#include "index_manager.h"
 #include <string>
 #include <vector>
 
@@ -13,7 +14,7 @@ public:
      * 构造函数
      * @param tableManager 表管理器引用
      */
-    CLI(TableManager &tableManager, Test &test);
+    CLI(TableManager &tableManager, Test &test, IndexManager &indexManager);
     ~CLI() = default;
 
     /**
@@ -24,6 +25,7 @@ public:
 private:
     TableManager& tableManager_;  // 表管理器引用
     Test& test_;                  // 测试类引用
+    IndexManager& indexManager_;  // 索引管理器引用
 
     /**
      * 解析命令
@@ -86,6 +88,18 @@ private:
      * @param args 命令参数
      */
     void handleVacuum(const std::vector<std::string>& args);
+
+    /**
+     * 创建索引
+     * @param args 命令参数
+     */
+    void handleCreateIndex(const std::vector<std::string>& args);
+
+    /**
+     * 展示索引
+     * @param args 命令参数
+     */
+    void handleShowIndex(const std::vector<std::string>& args);
 };
 
 #endif  // CLI_H

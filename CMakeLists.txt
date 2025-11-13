@@ -20,4 +20,6 @@ add_executable(NpcBase src/main.cpp
         include/log_manager.h
         src/test.cpp
         include/test.h
+        src/index_manager.cpp
+        include/index_manager.h
 )

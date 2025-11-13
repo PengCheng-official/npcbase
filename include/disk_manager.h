@@ -83,43 +83,6 @@ public:
      * 为新日志创建文件
      */
     RC createLogFile();
-//
-//    /**
-//     * 打开已有日志文件
-//     */
-//    RC openLogFile();
-//
-//    /**
-//     * 关闭日志文件
-//     */
-//    RC closeLogFile();
-//
-//    /**
-//     * 为日志分配新块
-//     * @param blockNum 输出参数，返回块号（表内唯一）
-//     */
-//    RC allocLogBlock(BlockNum& blockNum);
-//
-//    /**
-//     * 释放日志的块
-//     * @param blockNum 块号
-//     */
-//    RC freeLogBlock(BlockNum blockNum);
-//
-//    /**
-//     * 从日志的块读取数据
-//     * @param blockNum 块号
-//     * @param data 数据缓冲区
-//     */
-//    RC readLogBlock(BlockNum blockNum, char* data);
-//
-//    /**
-//     * 向日志的块写入数据
-//     * @param blockNum 块号
-//     * @param data 数据缓冲区
-//     */
-//    RC writeLogBlock(BlockNum blockNum, const char* data);
-
 
     /**
      * 获取表文件路径
@@ -128,11 +91,11 @@ public:
     std::string getFilePath(TableId tableId) const {
         if (tableId == LOG_TABLE_ID) {
             return dbName_ + ".log";
-        }
-        else if (tableId == PLAN_TABLE_ID) {
+        } else if (tableId == PLAN_TABLE_ID) {
             return "";
-        }
-        else {
+        } else if (tableId == INDEX_META_TABLE_ID) {
+            return dbName_ + "_indexes.db"; // 独立的索引元数据文件
+        } else {
             return dbName_ + std::to_string(tableId) + ".db";
         }
     }
@@ -144,24 +107,12 @@ public:
      */
     RC readTableFileHeader(TableId tableId, TableFileHeader& header);
 
-//    /**
-//     * 读取日志文件头
-//     * @param header 输出参数，日志文件头
-//     */
-//    RC readLogFileHeader(TableFileHeader &header);
-
     /**
      * 写入表文件头
      * @param tableId 表ID
      * @param header 文件头
      */
     RC writeTableFileHeader(TableId tableId, const TableFileHeader& header);
-
-//    /**
-//     * 写入日志文件头
-//     * @param header 文件头
-//     */
-//    RC writeLogFileHeader(const TableFileHeader &header);
 
 private:
     size_t diskSize_;          // 磁盘大小

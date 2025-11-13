@@ -4,7 +4,7 @@
 #include <vector>
 #include <limits>
 
-CLI::CLI(TableManager &tableManager, Test &test) : tableManager_(tableManager), test_(test) {}
+CLI::CLI(TableManager &tableManager, Test &test, IndexManager &indexManager) : tableManager_(tableManager), test_(test), indexManager_(indexManager) {}
 
 void CLI::run() {
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
@@ -57,6 +57,10 @@ void CLI::executeCommand(const std::string& cmd, const std::vector<std::string>&
         handleTest(args);
     } else if (cmd == "create" && args.size() >= 2 && args[0] == "table") {
         handleCreateTable(args);
+    } else if (cmd == "create" && args.size() >= 2 && args[0] == "index") {
+        handleCreateIndex(args);
+    } else if (cmd == "show" && args.size() >= 2 && args[0] == "index") {
+        handleShowIndex(args);
     } else if (cmd == "insert") {
         handleInsert(args);
     } else if (cmd == "delete") {
@@ -75,6 +79,8 @@ void CLI::executeCommand(const std::string& cmd, const std::vector<std::string>&
 void CLI::printHelp() {
     std::cout << "Available commands:" << std::endl;
     std::cout << "  create table <table_name> (<attr_name> <type> [<length>], ...) - Create a new table" << std::endl;
+    std::cout << "  create index <index_name> on <table_name>(<column_name>) [unique] - Create a B+tree index" << std::endl;
+    std::cout << "  show index <index_name> - Show index page contents" << std::endl;
     std::cout << "  insert into <table_name> values (...) - Insert a new record" << std::endl;
     std::cout << "  delete from <table_name> where rid=<page>:<slot> - Delete a record" << std::endl;
     std::cout << "  update <table_name> set ... where rid=<page>:<slot> - Update a record" << std::endl;
@@ -95,6 +101,8 @@ void CLI::handleTest(const std::vector<std::string> &args) {
         test_.runTask1();
     } else if (args[0] == "2") {
         test_.runTask2();
+    } else if (args[0] == "3") {
+        test_.runTask3();
     } else {
         std::cout << "Invalid test number. This task is not available" << std::endl;
         return;
@@ -187,7 +195,7 @@ void CLI::handleCreateTable(const std::vector<std::string>& args) {
     }
 
     // TODO: 实际应从事务管理器获取txId
-    RC rc = tableManager_.createTable(1, tableName.c_str(), attrs.size(), attrs.data());
+    RC rc = tableManager_.createTable(1, tableName.c_str(), (int)attrs.size(), attrs.data());
     if (rc == RC_OK) {
         std::cout << "Table " << tableName << " created successfully" << std::endl;
     } else if (rc == RC_TABLE_EXISTS) {
@@ -212,7 +220,7 @@ void CLI::handleInsert(const std::vector<std::string>& args) {
     }
     
     RID rid;
-    RC rc = tableManager_.insertRecord(0, tableName.c_str(), data.c_str(), data.length(), rid);
+    RC rc = tableManager_.insertRecord(0, tableName.c_str(), data.c_str(), (int)data.length(), rid);
     if (rc == RC_OK) {
         std::cout << "Record inserted with RID: " << rid.pageNum << ":" << rid.slotNum << std::endl;
     } else {
@@ -271,7 +279,7 @@ void CLI::handleUpdate(const std::vector<std::string>& args) {
         SlotNum slotNum = std::stoi(ridStr.substr(colonPos + 1));
         RID rid(pageNum, slotNum);
         
-        RC rc = tableManager_.updateRecord(0, tableName.c_str(), rid, newData.c_str(), newData.length());
+        RC rc = tableManager_.updateRecord(0, tableName.c_str(), rid, newData.c_str(), (int)newData.length());
         if (rc == RC_OK) {
             std::cout << "Record updated successfully" << std::endl;
         } else {
@@ -327,5 +335,63 @@ void CLI::handleVacuum(const std::vector<std::string>& args) {
         std::cout << "Vacuum completed successfully" << std::endl;
     } else {
         std::cout << "Error during vacuum: " << rc << std::endl;
+    }
+}
+
+void CLI::handleCreateIndex(const std::vector<std::string> &args) {
+    // Syntax: create index <index_name> on <table>(<column>) [unique]
+    if (args.size() < 4 || args[2] != "on") {
+        std::cout << "Usage: create index <index_name> on <table>(<column>) [unique]" << std::endl;
+        return;
+    }
+    std::string indexName = args[1];
+    std::string tableAndCol;
+    for (size_t i = 3; i < args.size(); ++i) {
+        if (!tableAndCol.empty()) tableAndCol += " ";
+        tableAndCol += args[i];
+    }
+    // parse table and column
+    auto lpar = tableAndCol.find('(');
+    auto rpar = tableAndCol.find(')');
+    if (lpar == std::string::npos || rpar == std::string::npos || rpar <= lpar) {
+        std::cout << "Invalid ON clause. Expect <table>(<column>)" << std::endl;
+        return;
+    }
+    std::string tableName = tableAndCol.substr(0, lpar);
+    std::string columnName = tableAndCol.substr(lpar + 1, rpar - lpar - 1);
+    // trim spaces and commas
+    auto trim = [](std::string s){
+        size_t b = s.find_first_not_of(" ,");
+        size_t e = s.find_last_not_of(" ,");
+        if (b == std::string::npos) return std::string();
+        return s.substr(b, e - b + 1);
+    };
+    tableName = trim(tableName);
+    columnName = trim(columnName);
+
+    bool unique = tableAndCol.find("unique") != std::string::npos;
+
+    RC rc = indexManager_.createIndex(1, indexName.c_str(), tableName.c_str(), columnName.c_str(), unique);
+    if (rc == RC_OK) {
+        std::cout << "Index " << indexName << " created on " << tableName << "(" << columnName << ")" << std::endl;
+    } else if (rc == RC_TABLE_EXISTS) {
+        std::cout << "Index name already exists: " << indexName << std::endl;
+    } else if (rc == RC_TABLE_NOT_FOUND) {
+        std::cout << "Table not found: " << tableName << std::endl;
+    } else if (rc == RC_ATTR_NOT_FOUND) {
+        std::cout << "Column not found: " << columnName << std::endl;
+    } else {
+        std::cout << "Failed to create index. RC=" << rc << std::endl;
+    }
+}
+
+void CLI::handleShowIndex(const std::vector<std::string> &args) {
+    if (args.size() != 2) {
+        std::cout << "Usage: show index <index_name>" << std::endl;
+        return;
+    }
+    RC rc = indexManager_.showIndex(args[1].c_str());
+    if (rc != RC_OK) {
+        std::cout << "Failed to show index. RC=" << rc << std::endl;
     }
 }

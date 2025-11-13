@@ -6,6 +6,9 @@
 #include "mem_manager.h"
 #include "disk_manager.h"
 
+// 前向声明，避免头文件循环依赖
+class IndexManager;
+
 // 变长记录页面头
 struct VarPageHeader {
     PageNum pageNum;          // 当前页面的页号（唯一标识）
@@ -31,8 +34,10 @@ public:
      * @param dataDict 数据字典引用
      * @param memManager 内存管理器引用
      * @param diskManager 磁盘管理器引用
+     * @param logManager 日志管理器引用
+     * @param indexManager 索引管理器引用
      */
-    TableManager(DataDict &dataDict, DiskManager &diskManager, MemManager &memManager, LogManager &logManager);
+    TableManager(DataDict &dataDict, DiskManager &diskManager, MemManager &memManager, LogManager &logManager, IndexManager &indexManager);
     ~TableManager() = default;
 
     /**
@@ -97,6 +102,7 @@ private:
     MemManager& memManager_;  // 内存管理器引用
     DiskManager& diskManager_;// 磁盘管理器引用
     LogManager& logManager_;  // 日志管理器引用
+    IndexManager& indexManager_; // 索引管理器引用
 
     /**
      * 初始化新页面

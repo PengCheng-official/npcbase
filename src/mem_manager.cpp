@@ -169,7 +169,8 @@ RC MemManager::flushSpace(MemSpaceType spaceType) {
     else if (spaceType == DICT_SPACE) {
         for (auto &frame: frames_) {
             if (frame.isDirty && frame.spaceType == spaceType) {
-                RC rc = diskManager_.writeBlock(DICT_TABLE_ID, frame.pageNum, frame.data);
+                // 修复：将字典类页面写回其所属的表（可能是DICT_TABLE_ID或INDEX_META_TABLE_ID）
+                RC rc = diskManager_.writeBlock(frame.tableId, frame.pageNum, frame.data);
                 if (rc != RC_OK) {
                     return rc;
                 }

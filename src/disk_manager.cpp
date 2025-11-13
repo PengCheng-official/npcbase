@@ -33,6 +33,11 @@ RC DiskManager::init() {
         if (rc != RC_OK && rc != RC_FILE_EXISTS) {
             return rc;
         }
+        // 创建索引元数据文件
+        rc = createTableFile(INDEX_META_TABLE_ID);
+        if (rc != RC_OK && rc != RC_FILE_EXISTS) {
+            return rc;
+        }
     } catch (const std::exception &e) {
         return RC_FILE_NOT_FOUND;
     }
@@ -391,4 +396,3 @@ RC DiskManager::createLogFile() {
 //RC DiskManager::writeLogFileHeader(const TableFileHeader &header) {
 //    return writeTableFileHeader(LOG_TABLE_ID, header);
 //}
-

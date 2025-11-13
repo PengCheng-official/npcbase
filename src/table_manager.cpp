@@ -1,9 +1,10 @@
 #include "../include/table_manager.h"
+#include "../include/index_manager.h"
 #include <cstring>
 #include <iostream>
 
-TableManager::TableManager(DataDict &dataDict, DiskManager &diskManager, MemManager &memManager, LogManager &logManager)
-        : dataDict_(dataDict), memManager_(memManager), diskManager_(diskManager), logManager_(logManager) {}
+TableManager::TableManager(DataDict &dataDict, DiskManager &diskManager, MemManager &memManager, LogManager &logManager, IndexManager &indexManager)
+        : dataDict_(dataDict), memManager_(memManager), diskManager_(diskManager), logManager_(logManager), indexManager_(indexManager) {}
 
 RC TableManager::createTable(TransactionId txId, const char *tableName, int attrCount, const AttrInfo *attrs) {
     if (tableName == nullptr || attrCount <= 0 || attrCount > MAX_ATTRS_PER_TABLE || attrs == nullptr) {
@@ -109,6 +110,9 @@ RC TableManager::insertRecord(TransactionId txId, const char *tableName, const c
     // 设置返回的RID
     rid = RID(pageNum, slotNum);
 
+    // 索引维护：插入
+    indexManager_.onRecordInserted(tableInfo, data, length, rid);
+
     // 释放页面
     memManager_.releasePage(tableInfo.tableId, pageNum);
 
@@ -166,6 +170,9 @@ RC TableManager::deleteRecord(TransactionId txId, const char *tableName, const R
 
     // 标记页面为脏页
     memManager_.markDirty(tableInfo.tableId, rid.pageNum);
+
+    // 索引维护：删除
+    indexManager_.onRecordDeleted(tableInfo, data, dataLen, rid);
 
     // 释放页面
     memManager_.releasePage(tableInfo.tableId, rid.pageNum);
@@ -359,20 +366,6 @@ RC TableManager::findPageForInsert(const TableInfo &tableInfo, int length, PageN
     initNewPage(frame->data, pageNum);
     frame->isDirty = true;
 
-//    // 更新缓冲帧信息
-//    frame->tableId = tableInfo.tableId;
-//    frame->pageNum = pageNum;
-//    frame->isDirty = true; // 新页面需要写入磁盘
-//    frame->pinCount = 1;  // 增加引用计数
-
-//    // 将新页面写入磁盘（持久化初始化数据）
-//    rc = diskManager_.writeBlock(newBlockNum, frame->data);
-//    if (rc != RC_OK) {
-//        memManager_.releasePage(tableInfo.tableId, pageNum);
-//        diskManager_.freeBlock(newBlockNum);
-//        return rc;
-//    }
-
     // 更新表信息
     dataDict_.updateTableInfo(tableInfo.tableId, pageNum, tableInfo.recordCount);
 
@@ -399,7 +392,7 @@ RC TableManager::findFreeSlot(char *pageData, int length, SlotNum &slotNum) {
 
             return RC_OK;
         }
-    }
+        }
 
     // 没有合适的空闲槽位，使用新槽位
     slotNum = header->recordCount + header->deletedCount;
