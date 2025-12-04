@@ -34,7 +34,6 @@ KeyBytes IndexManager::extractKey(const char *data, int len, AttrType type, int 
     return kb;
 }
 
-// ===== New: createIndex implementation =====
 RC IndexManager::createIndex(TransactionId txId, const char* indexName, const char* tableName, const char* columnName, bool unique) {
     if (!indexName || !tableName || !columnName) return RC_INVALID_ARG;
 
@@ -108,7 +107,7 @@ RC IndexManager::initNewIndexRoot(TableId indexId, PageNum rootPage, int maxKeys
     hdr->keyCount = 0;
     hdr->maxKeys = (int16_t)maxKeys;
     hdr->parentPage = -1;
-    hdr->leftMostChild = leaf ? -1 : -1;
+    hdr->leftMostChild = -1; // always initialize as invalid
     memManager_.markDirty(indexId, rootPage);
     memManager_.releasePage(indexId, rootPage);
     return RC_OK;
@@ -373,6 +372,14 @@ RC IndexManager::insertIntoParent(TableId indexId, const IndexInfo &info, PageNu
         std::memcpy(slot, upKey.bytes.data(), keyLen);
         *reinterpret_cast<int32_t*>(slot + keyLen) = right;
         ph->keyCount++;
+        // 确保右孩子的父指针正确
+        BufferFrame* rightFrame = nullptr;
+        if (readPage(indexId, right, rightFrame) == RC_OK) {
+            auto* rh = reinterpret_cast<IndexPageHeader*>(rightFrame->data);
+            rh->parentPage = ph->pageNum;
+            memManager_.markDirty(indexId, right);
+            releasePage(indexId, right);
+        }
         memManager_.markDirty(indexId, parent);
         releasePage(indexId, parent);
         releasePage(indexId, left);
@@ -423,8 +430,12 @@ RC IndexManager::splitInternalAndInsert(TableId indexId, const IndexInfo &info, 
     for (int i = 0; i < mid; ++i) {
         std::memcpy(internalEntryPtr(internalFrame->data, keyLen, i), tmpKeys.data() + i*(keyLen+8), keyLen+8);
     }
-    // 计算右页的leftMostChild = c_mid
-    int32_t c_mid = (mid == 0) ? leftMost : *reinterpret_cast<int32_t*>(tmpKeys.data() + (mid-1)*(keyLen+8) + keyLen);
+
+    // 计算右页的leftMostChild = c_(mid)（被提升键右侧的孩子）
+    int32_t c_mid_plus = (mid == 0) ? leftMost : *reinterpret_cast<int32_t*>(tmpKeys.data() + (mid-1)*(keyLen+8) + keyLen);
+    // 注意：上式给出了c_(mid)，即第mid-1个键的右孩子。真正的右页leftMost应为被提升键（mid）的右孩子：
+    // 它存储在第mid个entry的child字段中。
+    int32_t rightLeftMost = *reinterpret_cast<int32_t*>(tmpKeys.data() + mid*(keyLen+8) + keyLen);
 
     // 提升键 = mid项的key
     KeyBytes promote(keyLen); std::memcpy(promote.bytes.data(), tmpKeys.data() + mid*(keyLen+8), keyLen);
@@ -434,10 +445,22 @@ RC IndexManager::splitInternalAndInsert(TableId indexId, const IndexInfo &info, 
     auto* rh = reinterpret_cast<IndexPageHeader*>(r->data);
     int rightCount = total - (mid + 1);
     rh->keyCount = rightCount;
-    rh->leftMostChild = c_mid;
+    rh->leftMostChild = rightLeftMost;
     for (int i = 0; i < rightCount; ++i) {
         std::memcpy(internalEntryPtr(r->data, keyLen, i), tmpKeys.data() + (mid+1+i)*(keyLen+8), keyLen+8);
     }
+
+    // 更新移动到右页的所有孩子的parent指针
+    std::vector<PageNum> movedChildren;
+    movedChildren.reserve(rightCount + 1);
+    // 右页的最左孩子
+    movedChildren.push_back(rightLeftMost);
+    // 右页其它entry的右孩子
+    for (int i = 0; i < rightCount; ++i) {
+        int32_t childR = *reinterpret_cast<int32_t*>(tmpKeys.data() + (mid+1+i)*(keyLen+8) + keyLen);
+        movedChildren.push_back(childR);
+    }
+    setChildrenParent(indexId, movedChildren, newBlock);
 
     memManager_.markDirty(indexId, hdr->pageNum);
     memManager_.markDirty(indexId, newBlock);
@@ -485,7 +508,6 @@ RC IndexManager::deleteKey(TableId indexId, const IndexInfo &info, const KeyByte
     return rebalanceAfterDelete(indexId, info, leafPageNum);
 }
 
-// ===== 辅助：父子关系操作 =====
 int32_t IndexManager::getChildAt(char* parentPageData, int keyLen, int childIndex) const {
     auto* ph = reinterpret_cast<IndexPageHeader*>(parentPageData);
     if (childIndex == 0) return ph->leftMostChild;
@@ -520,7 +542,6 @@ RC IndexManager::updateParentKeyForRightChild(TableId indexId, BufferFrame* pare
     return RC_OK;
 }
 
-// ===== New: removeParentEntryAt and internal rebalance exist; add shrinkRootIfNeeded and leaf rebalance =====
 RC IndexManager::removeParentEntryAt(TableId indexId, const IndexInfo& info, BufferFrame* parentFrame, int removeKeyPos) {
     auto* ph = reinterpret_cast<IndexPageHeader*>(parentFrame->data);
     int n = ph->keyCount;
@@ -650,7 +671,7 @@ RC IndexManager::rebalanceAfterDelete(TableId indexId, const IndexInfo &info, Pa
         }
     }
 
-    // 不能借 -> 合并（优先与左合并）
+    // 借不到则合并（左优先）
     if (childIndex - 1 >= 0) {
         int32_t leftPage = getChildAt(parent->data, keyLen, childIndex - 1);
         if (leftPage != -1) {
@@ -675,7 +696,7 @@ RC IndexManager::rebalanceAfterDelete(TableId indexId, const IndexInfo &info, Pa
                     memManager_.markDirty(indexId, leftPage);
                     // 从父删除分隔键 childIndex-1
                     RC rrc = removeParentEntryAt(indexId, info, parent, childIndex - 1);
-                    releasePage(indexId, leftPage); releasePage(indexId, lh->parentPage); releasePage(indexId, leafPage);
+                    releasePage(indexId, leftPage); releasePage(indexId, lhdr->parentPage); releasePage(indexId, leafPage);
                     return rrc;
                 }
                 releasePage(indexId, leftPage);
@@ -820,11 +841,13 @@ RC IndexManager::rebalanceInternalAfterDelete(TableId indexId, const IndexInfo& 
                 if (lh2->nodeType == (uint8_t)IndexNodeType::INTERNAL) {
                     std::vector<PageNum> movedChildren;
                     movedChildren.reserve(hdr->keyCount + 1);
+                    // 将父分隔键下移到左页末尾，右孩子=当前页leftMostChild
                     char* parentSep = internalEntryPtr(parent->data, keyLen, childIndex - 1);
                     char* dst = internalEntryPtr(left->data, keyLen, lh2->keyCount);
                     std::memcpy(dst, parentSep, keyLen);
                     *reinterpret_cast<int32_t*>(dst + keyLen) = hdr->leftMostChild;
                     movedChildren.push_back(hdr->leftMostChild);
+                    // 将当前页的所有entry依次追加到左页
                     for (int i = 0; i < hdr->keyCount; ++i) {
                         char* src = internalEntryPtr(frame->data, keyLen, i);
                         std::memcpy(internalEntryPtr(left->data, keyLen, lh2->keyCount + 1 + i), src, keyLen + 8);
@@ -834,8 +857,9 @@ RC IndexManager::rebalanceInternalAfterDelete(TableId indexId, const IndexInfo& 
                     lh2->keyCount += 1 + hdr->keyCount;
                     memManager_.markDirty(indexId, leftPage);
                     setChildrenParent(indexId, movedChildren, leftPage);
+                    // 从父删除分隔键 childIndex-1
                     RC rrc = removeParentEntryAt(indexId, info, parent, childIndex - 1);
-                    releasePage(indexId, leftPage); releasePage(indexId, hdr->parentPage); releasePage(indexId, pageNum);
+                    releasePage(indexId, leftPage); releasePage(indexId, lh2->parentPage); releasePage(indexId, pageNum);
                     return rrc;
                 }
                 releasePage(indexId, leftPage);
@@ -866,7 +890,7 @@ RC IndexManager::rebalanceInternalAfterDelete(TableId indexId, const IndexInfo& 
                     memManager_.markDirty(indexId, pageNum);
                     setChildrenParent(indexId, movedChildren, pageNum);
                     RC rrc = removeParentEntryAt(indexId, info, parent, childIndex);
-                    releasePage(indexId, rightPage); releasePage(indexId, hdr->parentPage); releasePage(indexId, pageNum);
+                    releasePage(indexId, rightPage); releasePage(indexId, ph->parentPage); releasePage(indexId, pageNum);
                     return rrc;
                 }
                 releasePage(indexId, rightPage);
@@ -915,6 +939,9 @@ RC IndexManager::showIndex(const char *indexName) {
     IndexInfo idx; RC rc = dataDict_.findIndex(indexName, idx);
     if (rc != RC_OK) { std::cout << "Index not found: " << indexName << std::endl; return rc; }
 
+    // 为了展示一致状态，先刷新缓冲（避免读盘不见脏页）
+    memManager_.flushAllPages();
+
     // 确保索引文件已打开
     diskManager_.openTableFile(idx.indexId);
 
@@ -925,31 +952,77 @@ RC IndexManager::showIndex(const char *indexName) {
               << ", Column: " << idx.columnName << ", Root: " << idx.rootPage
               << ", Height: " << idx.height << ", UsedBlocks: " << hdr.usedBlocks << std::endl;
 
-    char buf[BLOCK_SIZE];
-    for (BlockNum b = 0; b < hdr.usedBlocks; ++b) {
-        RC rr = diskManager_.readBlock(idx.indexId, b, buf);
-        if (rr != RC_OK) continue;
-        auto* ph = reinterpret_cast<IndexPageHeader*>(buf);
-        if (ph->keyCount <= 0 && ph->pageNum != idx.rootPage) continue;
-        std::cout << "  Page #" << b << " type=" << ((ph->nodeType==(uint8_t)IndexNodeType::LEAF)?"LEAF":"INTERNAL")
-                  << " prev=" << ph->prevPage << " next=" << ph->nextPage
-                  << " keys=" << ph->keyCount << "/" << ph->maxKeys << std::endl;
-        int keyLen = idx.keyLen;
-        int show = std::min<int>(ph->keyCount, 6);
-        for (int i = 0; i < show; ++i) {
-            if (ph->nodeType == (uint8_t)IndexNodeType::LEAF) {
-                char* p = leafEntryPtr(buf, keyLen, (i<3?i:(ph->keyCount - (show - i))));
-                int32_t page = *reinterpret_cast<int32_t*>(p + keyLen);
-                int32_t slot = *reinterpret_cast<int32_t*>(p + keyLen + 4);
-                int32_t keyPreview = 0; std::memcpy(&keyPreview, p, std::min(4, keyLen));
-                std::cout << "    [" << i << "] key~=" << keyPreview << " -> (" << page << "," << slot << ")" << std::endl;
+    if (idx.rootPage < 0) return RC_OK;
+
+    // 从根开始，先打印自顶向下的层级，然后打印叶子链
+    // 层序遍历（最多简单打印少量示例键）
+    std::vector<PageNum> q{idx.rootPage};
+    std::vector<PageNum> leaves;
+    int keyLen = idx.keyLen;
+
+    while (!q.empty()) {
+        std::vector<PageNum> nq;
+        for (PageNum p : q) {
+            char buf[BLOCK_SIZE];
+            if (p < 0) continue;
+            if (diskManager_.readBlock(idx.indexId, p, buf) != RC_OK) continue;
+            auto* ph = reinterpret_cast<IndexPageHeader*>(buf);
+            std::cout << "  Page #" << p << " type=" << ((ph->nodeType==(uint8_t)IndexNodeType::LEAF)?"LEAF":"INTERNAL")
+                      << " prev=" << ph->prevPage << " next=" << ph->nextPage
+                      << " keys=" << ph->keyCount << "/" << ph->maxKeys << std::endl;
+            int show = std::min<int>(ph->keyCount, 6);
+            for (int i = 0; i < show; ++i) {
+                if (ph->nodeType == (uint8_t)IndexNodeType::LEAF) {
+                    char* pentry = leafEntryPtr(buf, keyLen, (i<3?i:(ph->keyCount - (show - i))));
+                    int32_t page = *reinterpret_cast<int32_t*>(pentry + keyLen);
+                    int32_t slot = *reinterpret_cast<int32_t*>(pentry + keyLen + 4);
+                    int32_t keyPreview = 0; std::memcpy(&keyPreview, pentry, std::min(4, keyLen));
+                    std::cout << "    [" << i << "] key~=" << keyPreview << " -> (" << page << "," << slot << ")" << std::endl;
+                } else {
+                    char* e = internalEntryPtr(buf, keyLen, (i<3?i:(ph->keyCount - (show - i))));
+                    int32_t child = *reinterpret_cast<int32_t*>(e + keyLen);
+                    int32_t keyPreview = 0; std::memcpy(&keyPreview, e, std::min(4, keyLen));
+                    std::cout << "    [" << i << "] key~=" << keyPreview << " -> child=" << child << std::endl;
+                }
+            }
+
+            if (ph->nodeType == (uint8_t)IndexNodeType::INTERNAL) {
+                if (ph->leftMostChild >= 0) nq.push_back(ph->leftMostChild);
+                for (int i = 0; i < ph->keyCount; ++i) {
+                    char* e = internalEntryPtr(buf, keyLen, i);
+                    int32_t child = *reinterpret_cast<int32_t*>(e + keyLen);
+                    if (child >= 0) nq.push_back(child);
+                }
             } else {
-                char* e = internalEntryPtr(buf, keyLen, (i<3?i:(ph->keyCount - (show - i))));
-                int32_t child = *reinterpret_cast<int32_t*>(e + keyLen);
-                int32_t keyPreview = 0; std::memcpy(&keyPreview, e, std::min(4, keyLen));
-                std::cout << "    [" << i << "] key~=" << keyPreview << " -> child=" << child << std::endl;
+                leaves.push_back(p);
             }
         }
+        q.swap(nq);
+    }
+
+    // 打印叶子链（从最左到最右）
+    if (!leaves.empty()) {
+        // 找最左叶
+        PageNum leftmost = idx.rootPage;
+        while (true) {
+            char buf[BLOCK_SIZE];
+            if (diskManager_.readBlock(idx.indexId, leftmost, buf) != RC_OK) break;
+            auto* ph = reinterpret_cast<IndexPageHeader*>(buf);
+            if (ph->nodeType == (uint8_t)IndexNodeType::LEAF) break;
+            if (ph->leftMostChild < 0) break;
+            leftmost = ph->leftMostChild;
+        }
+        std::cout << "  Leaf chain: ";
+        PageNum p = leftmost; bool first = true;
+        while (p != -1) {
+            char buf2[BLOCK_SIZE];
+            if (diskManager_.readBlock(idx.indexId, p, buf2) != RC_OK) break;
+            auto* ph2 = reinterpret_cast<IndexPageHeader*>(buf2);
+            if (!first) std::cout << " -> "; first = false;
+            std::cout << p << "(keys=" << ph2->keyCount << ")";
+            p = ph2->nextPage;
+        }
+        std::cout << std::endl;
     }
 
     return RC_OK;

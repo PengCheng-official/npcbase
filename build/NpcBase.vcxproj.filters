@@ -1,0 +1,72 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="17.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClCompile Include="D:\Pengcheng\University\Year3\DBMS\NpcBase\src\main.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="D:\Pengcheng\University\Year3\DBMS\NpcBase\src\data_dict.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="D:\Pengcheng\University\Year3\DBMS\NpcBase\src\mem_manager.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="D:\Pengcheng\University\Year3\DBMS\NpcBase\src\disk_manager.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="D:\Pengcheng\University\Year3\DBMS\NpcBase\src\table_manager.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="D:\Pengcheng\University\Year3\DBMS\NpcBase\src\cli.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="D:\Pengcheng\University\Year3\DBMS\NpcBase\src\log_manager.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="D:\Pengcheng\University\Year3\DBMS\NpcBase\src\test.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="D:\Pengcheng\University\Year3\DBMS\NpcBase\src\index_manager.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="D:\Pengcheng\University\Year3\DBMS\NpcBase\include\npcbase.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="D:\Pengcheng\University\Year3\DBMS\NpcBase\include\data_dict.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="D:\Pengcheng\University\Year3\DBMS\NpcBase\include\mem_manager.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="D:\Pengcheng\University\Year3\DBMS\NpcBase\include\disk_manager.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="D:\Pengcheng\University\Year3\DBMS\NpcBase\include\table_manager.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="D:\Pengcheng\University\Year3\DBMS\NpcBase\include\cli.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="D:\Pengcheng\University\Year3\DBMS\NpcBase\include\log_manager.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="D:\Pengcheng\University\Year3\DBMS\NpcBase\include\test.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="D:\Pengcheng\University\Year3\DBMS\NpcBase\include\index_manager.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <CustomBuild Include="D:\Pengcheng\University\Year3\DBMS\NpcBase\CMakeLists.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="Header Files">
+      <UniqueIdentifier>{6BF095CC-D7B2-33E1-BDF6-5B6E7B93C0CB}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{B455D150-6260-335F-A809-C462091BB47B}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>

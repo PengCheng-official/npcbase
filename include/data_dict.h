@@ -112,6 +112,13 @@ public:
     RC findIndex(const char* indexName, IndexInfo& outIndex);
 
     /**
+     * 查找索引（通过索引ID）
+     * @param indexId 索引ID
+     * @param outIndex 输出参数，返回索引信息
+     */
+    RC findIndexById(TableId indexId, IndexInfo& outIndex);
+
+    /**
      * 列出表的所有索引
      * @param tableId 表ID
      * @param outIndexes 输出参数，返回索引信息列表

@@ -96,7 +96,7 @@ RC Test::runTask2() {
 }
 
 RC Test::runTask3() {
-    std::cout << "\n===== Starting Task 3 Test: B+Tree build/insert/update/delete =====" << std::endl;
+    std::cout << "\n===== Starting Task 3 Test: B+ Tree build/insert/update/delete =====" << std::endl;
 
     const char* tableName = "table3";
     const char* colName = "num";
@@ -155,17 +155,14 @@ RC Test::runTask3() {
               << ", header=" << sizeof(IndexPageHeader)
               << ", keyLen=" << keyLen << ", entry=" << (keyLen+8) << ")" << std::endl;
 
-    // Optional: quick modify/delete test to exercise B+Tree maintenance
-    // Update: delete a few RIDs (first 5 values) and re-show brief summary
+    // Update: delete a few records (first 5 values) and re-show brief summary
     for (int v = 0; v < 5; ++v) {
-        // naive lookup by RID pattern: we inserted sequentially, but RID assignment depends on paging
-        // so just delete by reading back record locations would be better; here we assume slot v exists on page tbl.firstPage
         RID rid(tbl.firstPage, (SlotNum)v);
         rc = tableManager_.deleteRecord(1, tableName, rid);
         if (rc != RC_OK) { /* skip on error to avoid aborting demo */ }
     }
 
-    std::cout << "After a few deletions (may skip if RID not valid), show index again:" << std::endl;
+    std::cout << "After delete 5 records , show index again:" << std::endl;
     indexManager_.showIndex(indexName);
 
     std::cout << "\n===== Task 3 Test Completed =====" << std::endl;

@@ -13,7 +13,6 @@
 enum class IndexNodeType : uint8_t { LEAF = 1, INTERNAL = 2 };
 
 // 索引页头（固定32字节）
-#pragma pack(push, 1)
 struct IndexPageHeader {
     uint8_t nodeType;     // 1字节：叶子/内部
     int32_t pageNum;      // 4字节：页号
@@ -23,9 +22,8 @@ struct IndexPageHeader {
     int16_t maxKeys;      // 2字节：最大键数量
     int32_t parentPage;   // 4字节：父节点页号
     int32_t leftMostChild;// 4字节：内部节点用，最左孩子页号；叶子为-1
-    uint8_t reserved[6];  // 填充到32字节
+    uint8_t reserved[7];  // 填充到32字节
 };
-#pragma pack(pop)
 
 // 将任意键值抽象为定长字节数组
 struct KeyBytes {

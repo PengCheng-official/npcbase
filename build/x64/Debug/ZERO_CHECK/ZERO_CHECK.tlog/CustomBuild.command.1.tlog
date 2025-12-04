@@ -1,0 +1,10 @@
+^D:\PENGCHENG\UNIVERSITY\YEAR3\DBMS\NPCBASE\BUILD\CMAKEFILES\46C2DF73AB05E12CC62D3537A5C40B83\GENERATE.STAMP.RULE
+setlocal
+D:\CodePrepare\CMake\bin\cmake.exe -SD:/Pengcheng/University/Year3/DBMS/NpcBase -BD:/Pengcheng/University/Year3/DBMS/NpcBase/build --check-stamp-list CMakeFiles/generate.stamp.list --vs-solution-file D:/Pengcheng/University/Year3/DBMS/NpcBase/build/NpcBase.sln
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd

@@ -59,16 +59,13 @@ RC TableManager::insertRecord(TransactionId txId, const char *tableName, const c
         return rc;
     }
 
-    // 计算记录所需空间
-    int requiredSpace = calculateRecordSpace(length);
-    if (requiredSpace > BLOCK_SIZE - sizeof(VarPageHeader)) {
-        return RC_RECORD_TOO_LONG;
-    }
+    // 计算记录所需空间（数据 + 槽元信息，若需新槽）
+    int requiredData = length;
 
     // 查找适合插入的页面
     PageNum pageNum;
     BufferFrame *frame = nullptr;
-    rc = findPageForInsert(tableInfo, requiredSpace, pageNum, frame);
+    rc = findPageForInsert(tableInfo, requiredData, pageNum, frame);
     if (rc != RC_OK) {
         return rc;
     }
@@ -81,19 +78,57 @@ RC TableManager::insertRecord(TransactionId txId, const char *tableName, const c
         return rc;
     }
 
-    // 写入记录数据
     VarPageHeader *header = reinterpret_cast<VarPageHeader *>(frame->data);
+
+    // 如果是新增槽位，需要为槽目录预留空间，并将现有数据整体后移sizeof(RecordSlot)
+    int totalSlotsBefore = header->recordCount + header->deletedCount;
+    bool isNewSlot = (slotNum == totalSlotsBefore);
+    if (isNewSlot) {
+        // 当前数据区起始位置（槽目录之后）
+        int oldStartOfData = sizeof(VarPageHeader) + totalSlotsBefore * (int)sizeof(RecordSlot);
+        int dataBytes = header->freeOffset - oldStartOfData;
+        int grow = (int)sizeof(RecordSlot);
+
+        // 检查空间是否足够放下新槽位和数据
+        if (BLOCK_SIZE - header->freeOffset < grow + length) {
+            // 空间不足，释放页面并返回
+            memManager_.releasePage(tableInfo.tableId, pageNum);
+            return RC_BUFFER_FULL;
+        }
+
+        // 将数据区整体后移，为新槽位让出空间
+        if (dataBytes > 0) {
+            std::memmove(frame->data + oldStartOfData + grow, frame->data + oldStartOfData, dataBytes);
+        }
+        // 更新所有已存在槽的offset
+        for (int i = 0; i < totalSlotsBefore; ++i) {
+            RecordSlot *s = reinterpret_cast<RecordSlot *>(frame->data + sizeof(VarPageHeader) + i * sizeof(RecordSlot));
+            if (!s->isDeleted) {
+                s->offset += grow;
+            }
+        }
+        // 扩展freeOffset以包含槽目录增长
+        header->freeOffset += grow;
+    }
+
+    // 槽写入位置（槽目录在页面头之后，顺序排列）
     RecordSlot *slot = reinterpret_cast<RecordSlot *>(frame->data + sizeof(VarPageHeader) +
                                                       slotNum * sizeof(RecordSlot));
 
+    // 检查剩余空间是否足够写入记录数据
+    int remainingSpace = BLOCK_SIZE - header->freeOffset;
+    if (remainingSpace < length) {
+        memManager_.releasePage(tableInfo.tableId, pageNum);
+        return RC_BUFFER_FULL;
+    }
+
+    // 写入记录数据
     slot->offset = header->freeOffset;
     slot->length = length;
     slot->isDeleted = false;
+    std::memcpy(frame->data + header->freeOffset, data, length);
 
-    // 复制记录数据
-    memcpy(frame->data + header->freeOffset, data, length);
-
-    // 更新页面头
+    // 更新页面头与表统计
     header->freeOffset += length;
     header->recordCount++;
     tableInfo.recordCount++;
@@ -322,7 +357,7 @@ RC TableManager::vacuum(const char *tableName) {
 void TableManager::initNewPage(char *pageData, PageNum pageNum) {
     VarPageHeader *header = reinterpret_cast<VarPageHeader *>(pageData);
     header->pageNum = pageNum;
-    header->freeOffset = sizeof(VarPageHeader); // 空闲空间从页面头之后开始
+    header->freeOffset = sizeof(VarPageHeader); // 空闲空间从页面头之后开始（槽目录动态增长时会前移数据）
     header->recordCount = 0;
     header->deletedCount = 0;
     memset(header->freeList, -1, sizeof(header->freeList)); // 初始化空闲槽位为-1（无效）
@@ -335,9 +370,12 @@ RC TableManager::findPageForInsert(const TableInfo &tableInfo, int length, PageN
         RC rc = memManager_.getPage(tableInfo.tableId, tableInfo.lastPage, frame, DATA_SPACE);
         if (rc == RC_OK) {
             VarPageHeader *header = reinterpret_cast<VarPageHeader *>(frame->data);
-            int remainingSpace = BLOCK_SIZE - header->freeOffset;  // 计算页面剩余可用空间
+            int remainingSpace = BLOCK_SIZE - header->freeOffset;  // 计算页面剩余可用空间（数据区之后）
 
-            if (remainingSpace >= length + 2) {  // 预留2字节作为记录长度标记
+            // 若无可复用槽位，则需要额外预留一个RecordSlot空间
+            int extraSlotBytes = (header->freeListCount > 0) ? 0 : (int)sizeof(RecordSlot);
+
+            if (remainingSpace >= length + extraSlotBytes) {
                 pageNum = tableInfo.lastPage;
                 return RC_OK;
             }
@@ -392,7 +430,7 @@ RC TableManager::findFreeSlot(char *pageData, int length, SlotNum &slotNum) {
 
             return RC_OK;
         }
-        }
+    }
 
     // 没有合适的空闲槽位，使用新槽位
     slotNum = header->recordCount + header->deletedCount;
@@ -400,6 +438,6 @@ RC TableManager::findFreeSlot(char *pageData, int length, SlotNum &slotNum) {
 }
 
 int TableManager::calculateRecordSpace(int length) {
-    // 记录数据长度 + 槽信息长度
-    return length + sizeof(RecordSlot);
+    // 记录数据长度 + 槽信息长度（按最坏情况考虑新增一个槽）
+    return length + (int)sizeof(RecordSlot);
 }

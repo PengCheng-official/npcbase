@@ -274,7 +274,6 @@ RC DataDict::listTables(std::vector<std::string> &tables) {
     return RC_OK;
 }
 
-// ======== 索引元数据（内存持久化简化版本）========
 RC DataDict::createIndexMetadata(TransactionId txId, const char *indexName, const char *tableName,
                                  const char *columnName, bool unique, IndexInfo &outIndex) {
     if (!indexName || !tableName || !columnName) return RC_INVALID_ARG;
