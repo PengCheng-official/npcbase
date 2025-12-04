@@ -1,4 +1,21 @@
 "D:\CodePrepare\CLion 2025.2.3\bin\cmake\win\x64\bin\cmake.exe" -DCMAKE_BUILD_TYPE=Debug "-DCMAKE_MAKE_PROGRAM=D:/CodePrepare/CLion 2025.2.3/bin/ninja/win/x64/ninja.exe" -G Ninja -S D:\Pengcheng\University\Year3\DBMS\NpcBase -B D:\Pengcheng\University\Year3\DBMS\NpcBase\cmake-build-debug
--- Configuring done (1.8s)
+-- Using in-project ANTLR4 runtime at D:/Pengcheng/University/Year3/DBMS/NpcBase/antlr4/runtime/Cpp
+-- Building without demo. To enable demo build use: -DWITH_DEMO=True
+CMake Warning (dev) at D:/CodePrepare/CLion 2025.2.3/bin/cmake/win/x64/share/cmake-4.0/Modules/FetchContent.cmake:1373 (message):
+  The DOWNLOAD_EXTRACT_TIMESTAMP option was not given and policy CMP0135 is
+  not set.  The policy's OLD behavior will be used.  When using a URL
+  download, the timestamps of extracted files should preferably be that of
+  the time of extraction, otherwise code that depends on the extracted
+  contents might not be rebuilt if the URL changes.  The OLD behavior
+  preserves the timestamps from the archive instead, but this is usually not
+  what you want.  Update your project to the NEW behavior or specify the
+  DOWNLOAD_EXTRACT_TIMESTAMP option with a value of true to avoid this
+  robustness issue.
+Call Stack (most recent call first):
+  antlr4/runtime/Cpp/runtime/CMakeLists.txt:71 (FetchContent_Declare)
+This warning is for project developers.  Use -Wno-dev to suppress it.
+
+-- Using ANTLR generated sources from D:/Pengcheng/University/Year3/DBMS/NpcBase/generated
+-- Configuring done (24.7s)
 -- Generating done (0.1s)
 -- Build files have been written to: D:/Pengcheng/University/Year3/DBMS/NpcBase/cmake-build-debug

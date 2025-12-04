@@ -1,0 +1,4 @@
+antlr4/
+*.log
+*.db
+cmake-build-debug/
