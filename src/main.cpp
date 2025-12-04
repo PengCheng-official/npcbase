@@ -88,12 +88,12 @@ int main(int argc, char* argv[]) {
     Test test(tableManager, memManager, diskManager, dataDict, indexManager);
 
     // 启动命令行交互
-    CLI cli(tableManager, test, indexManager);
+    CLI cli(tableManager, dataDict, test, indexManager);
     cli.run();
     
     // 关闭数据库
     memManager.flushAllPages();
-    std::cout << "Database closed." << std::endl;
+    std::cout << "Database closed!" << std::endl;
     
     return 0;
 }

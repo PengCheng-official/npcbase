@@ -4,6 +4,7 @@
 #include "table_manager.h"
 #include "test.h"
 #include "index_manager.h"
+#include "data_dict.h"
 #include <string>
 #include <vector>
 
@@ -14,7 +15,7 @@ public:
      * 构造函数
      * @param tableManager 表管理器引用
      */
-    CLI(TableManager &tableManager, Test &test, IndexManager &indexManager);
+    CLI(TableManager &tableManager, DataDict& dataDict, Test &test, IndexManager &indexManager);
     ~CLI() = default;
 
     /**
@@ -24,6 +25,7 @@ public:
 
 private:
     TableManager& tableManager_;  // 表管理器引用
+    DataDict& dataDict_;          // 数据字典引用
     Test& test_;                  // 测试类引用
     IndexManager& indexManager_;  // 索引管理器引用
 

@@ -22,4 +22,10 @@ add_executable(NpcBase src/main.cpp
         include/test.h
         src/index_manager.cpp
         include/index_manager.h
+        src/sql_parser.cpp
+        include/sql_ast.h
+        src/sql_plan.cpp
+        include/sql_plan.h
+        src/sql_physical.cpp
+        include/sql_physical.h
 )

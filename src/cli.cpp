@@ -3,8 +3,11 @@
 #include <sstream>
 #include <vector>
 #include <limits>
+#include "../include/sql_ast.h"
+#include "../include/sql_plan.h"
+#include "../include/sql_physical.h"
 
-CLI::CLI(TableManager &tableManager, Test &test, IndexManager &indexManager) : tableManager_(tableManager), test_(test), indexManager_(indexManager) {}
+CLI::CLI(TableManager &tableManager, DataDict& dataDict, Test &test, IndexManager &indexManager) : tableManager_(tableManager), dataDict_(dataDict), test_(test), indexManager_(indexManager) {}
 
 void CLI::run() {
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
@@ -103,6 +106,8 @@ void CLI::handleTest(const std::vector<std::string> &args) {
         test_.runTask2();
     } else if (args[0] == "3") {
         test_.runTask3();
+    } else if (args[0] == "4") {
+        test_.runTask4();
     } else {
         std::cout << "Invalid test number. This task is not available" << std::endl;
         return;
@@ -291,36 +296,65 @@ void CLI::handleUpdate(const std::vector<std::string>& args) {
 }
 
 void CLI::handleSelect(const std::vector<std::string>& args) {
-    if (args.size() < 4 || args[0] != "from" || args[2] != "where" || args[3].substr(0, 4) != "rid=") {
-        std::cout << "Usage: select from <table_name> where rid=<page>:<slot>" << std::endl;
-        return;
-    }
-    
-    std::string tableName = args[1];
-    std::string ridStr = args[3].substr(4);
-    size_t colonPos = ridStr.find(':');
-    if (colonPos == std::string::npos) {
-        std::cout << "Invalid RID format. Use <page>:<slot>" << std::endl;
-        return;
-    }
-    
-    try {
-        PageNum pageNum = std::stoi(ridStr.substr(0, colonPos));
-        SlotNum slotNum = std::stoi(ridStr.substr(colonPos + 1));
-        RID rid(pageNum, slotNum);
-        
-        char* data = nullptr;
-        int length = 0;
-        RC rc = tableManager_.readRecord(tableName.c_str(), rid, data, length);
-        if (rc == RC_OK) {
-            std::cout << "Record data: " << std::string(data, length) << std::endl;
-            delete[] data;
-        } else {
-            std::cout << "Error reading record: " << rc << std::endl;
+    // If user entered classic form: select from <table> where rid=<page>:<slot>
+    if (args.size() >= 4 && args[0] == "from" && args[2] == "where" && args[3].substr(0, 4) == "rid=") {
+        std::string tableName = args[1];
+        std::string ridStr = args[3].substr(4);
+        size_t colonPos = ridStr.find(':');
+        if (colonPos == std::string::npos) {
+            std::cout << "Invalid RID format. Use <page>:<slot>" << std::endl;
+            return;
         }
-    } catch (...) {
-        std::cout << "Invalid RID format" << std::endl;
+        try {
+            PageNum pageNum = std::stoi(ridStr.substr(0, colonPos));
+            SlotNum slotNum = std::stoi(ridStr.substr(colonPos + 1));
+            RID rid(pageNum, slotNum);
+            char* data = nullptr; int length = 0;
+            RC rc = tableManager_.readRecord(tableName.c_str(), rid, data, length);
+            if (rc == RC_OK) { std::cout << "Record data: " << std::string(data, length) << std::endl; delete[] data; }
+            else { std::cout << "Error reading record: " << rc << std::endl; }
+        } catch (...) { std::cout << "Invalid RID format" << std::endl; }
+        return;
     }
+
+    // New full SQL mode: args contains everything after the command token 'select'. Reconstruct SQL string.
+    std::string sql = "SELECT"; for (const auto& a : args) { sql += " "; sql += a; }
+    auto parseRes = parseSelectSql(sql);
+    if (!parseRes.ok) { std::cout << "Parse error: " << parseRes.error << std::endl; return; }
+
+    // Print AST
+    std::cout << "[Parse Tree] SELECT columns=";
+    for (size_t i=0;i<parseRes.select.columns.size();++i){ if(i) std::cout << ", "; std::cout << parseRes.select.columns[i]; }
+    std::cout << " FROM " << parseRes.select.table;
+    if (parseRes.select.where.has_value()) {
+        const auto& w = parseRes.select.where.value();
+        std::cout << " WHERE " << w.column << " " << w.op << " '" << w.literal << "'";
+    }
+    std::cout << std::endl;
+
+    // Semantic checks: table and columns exist
+    TableInfo ti; RC rcTbl = dataDict_.findTable(parseRes.select.table.c_str(), ti);
+    if (rcTbl != RC_OK) { std::cout << "Semantic error: table not found: " << parseRes.select.table << std::endl; return; }
+    if (!(parseRes.select.columns.size()==1 && parseRes.select.columns[0]=="*")) {
+        for (const auto& c : parseRes.select.columns) {
+            bool found=false; for(int i=0;i<ti.attrCount;i++){ if (c==ti.attrs[i].name){found=true;break;} }
+            if (!found) { std::cout << "Semantic error: column not found: " << c << std::endl; return; }
+        }
+    }
+
+    // Build logical plan
+    auto lp = buildLogicalPlan(parseRes.select);
+    if (!lp.ok) { std::cout << "Failed to build logical plan: " << lp.error << std::endl; return; }
+    std::cout << "[Logical Plan]\n" << printLogicalPlan(lp.plan);
+
+    // Optimize logical plan
+    auto opt = optimizeLogicalPlan(lp.plan, dataDict_);
+    if (!opt.ok) { std::cout << "Failed to optimize logical plan: " << opt.error << std::endl; return; }
+    std::cout << "[Optimized Logical Plan]\n" << printLogicalPlan(opt.optimized);
+
+    // Physical plan
+    auto phys = buildPhysicalPlan(opt.optimized, dataDict_, indexManager_);
+    std::cout << "[Physical Plan Steps]\n" << printPhysicalPlan(phys);
 }
 
 void CLI::handleVacuum(const std::vector<std::string>& args) {

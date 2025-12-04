@@ -4,7 +4,14 @@
 
 #include "../include/test.h"
 #include "../include/index_manager.h"
+#include "../include/sql_ast.h"
+#include "../include/sql_plan.h"
+#include "../include/sql_physical.h"
+#include "../include/npcbase.h"
 #include <iostream>
+#include <unordered_map>
+#include <cstdlib>
+#include <ctime>
 
 Test::Test(TableManager& tableManager, MemManager& memManager,
            DiskManager& diskManager, DataDict& dataDict, IndexManager& indexManager)
@@ -166,6 +173,152 @@ RC Test::runTask3() {
     indexManager_.showIndex(indexName);
 
     std::cout << "\n===== Task 3 Test Completed =====" << std::endl;
+    return RC_OK;
+}
+
+RC Test::runTask4() {
+    std::cout << "\n===== Starting Task 4 Test: SQL parse/plan =====" << std::endl;
+    // Seed RNG for 3-digit data generation
+    std::srand((unsigned int)std::time(nullptr));
+
+    // CREATE TABLE via SQL: two columns (num int, data int)
+    std::string createSql = "CREATE TABLE table4 (num int, data int)";
+    std::cout << "[SQL] " << createSql << std::endl;
+    auto createRes = parseCreateTableSql(createSql);
+    if (!createRes.ok) { std::cerr << "Create parse failed: " << createRes.error << std::endl; return RC_INVALID_OP; }
+    TableInfo tbl; RC rc = dataDict_.findTable(createRes.create.table.c_str(), tbl);
+    if (rc != RC_OK) {
+        std::vector<AttrInfo> attrs; attrs.reserve(createRes.create.columns.size());
+        for (const auto& cd : createRes.create.columns) {
+            AttrInfo ai{}; strncpy(ai.name, cd.name.c_str(), MAX_ATTR_NAME_LEN-1); ai.name[MAX_ATTR_NAME_LEN-1]='\0';
+            if (cd.type == "int") { ai.type = INT; ai.length = 4; }
+            else if (cd.type == "float") { ai.type = FLOAT; ai.length = 4; }
+            else if (cd.type == "string") { ai.type = STRING; ai.length = cd.length>0?cd.length:255; }
+            else { std::cerr << "Unsupported type in CREATE: " << cd.type << std::endl; return RC_INVALID_OP; }
+            attrs.push_back(ai);
+        }
+        rc = tableManager_.createTable(1, createRes.create.table.c_str(), (int)attrs.size(), attrs.data());
+        if (rc != RC_OK && rc != RC_TABLE_EXISTS) { std::cerr << "Failed to create table4 via SQL: " << rc << std::endl; return rc; }
+        dataDict_.findTable(createRes.create.table.c_str(), tbl);
+        std::cout << "[CREATE TABLE] Executed: " << createSql << std::endl;
+        std::cout << "[CREATE TABLE] Table '" << createRes.create.table << "' ready with " << tbl.attrCount << " column(s)" << std::endl;
+    } else {
+        std::cout << "[CREATE TABLE] Table '" << createRes.create.table << "' already exists" << std::endl;
+    }
+
+    // Helper: pack row according to schema
+    auto packRow = [&](const TableInfo& tinfo, const std::vector<std::string>& vals, std::string& out)->bool{
+        if ((int)vals.size() != tinfo.attrCount) { std::cerr << "Value count mismatch" << std::endl; return false; }
+        out.clear(); out.reserve(64);
+        for (int i=0;i<tinfo.attrCount;i++){
+            const AttrInfo& a = tinfo.attrs[i];
+            const std::string& v = vals[i];
+            if (a.type == INT) {
+                int x=0; try { x = std::stoi(v); } catch(...) { std::cerr << "Invalid INT literal: " << v << std::endl; return false; }
+                out.append(reinterpret_cast<const char*>(&x), sizeof(int));
+            } else if (a.type == FLOAT) {
+                float f=0.0f; try { f = std::stof(v); } catch(...) { std::cerr << "Invalid FLOAT literal: " << v << std::endl; return false; }
+                out.append(reinterpret_cast<const char*>(&f), sizeof(float));
+            } else if (a.type == STRING) {
+                std::string s=v; if ((int)s.size()>a.length) s.resize(a.length);
+                std::string padded = s; padded.resize(a.length, '\0');
+                out.append(padded.data(), a.length);
+            } else { return false; }
+        }
+        return true;
+    };
+
+    // INSERT via SQL: insert pairs (num, data) with data being a random 3-digit number
+    for (int i=0;i<10;i++){
+        int dataVal = 100 + std::rand() % 900; // 100..999
+        std::string insertSql = std::string("INSERT INTO table4 VALUES (") + std::to_string(i) + ", " + std::to_string(dataVal) + ")";
+        std::cout << "[SQL] " << insertSql << std::endl;
+        auto insRes = parseInsertSql(insertSql);
+        if (!insRes.ok) { std::cerr << "Insert parse failed: " << insRes.error << std::endl; return RC_INVALID_OP; }
+        TableInfo ti; dataDict_.findTable(insRes.insert.table.c_str(), ti);
+        std::string row; if (!packRow(ti, insRes.insert.values, row)) { return RC_INVALID_OP; }
+        RID rid; RC rc = tableManager_.insertRecord(1, ti.tableName, row.data(), (int)row.size(), rid);
+        if (rc != RC_OK) { std::cerr << "Insert via SQL failed: " << rc << std::endl; return rc; }
+        std::cout << "[INSERT] Executed: " << insertSql << " -> RID " << rid.pageNum << ":" << rid.slotNum << std::endl;
+    }
+    dataDict_.findTable("table4", tbl);
+    std::cout << "[INSERT] Table 'table4' now has " << tbl.recordCount << " records" << std::endl;
+
+    // create index on num to illustrate lookup path
+    rc = indexManager_.createIndex(1, "idx_table4_num", "table4", "num", false);
+    if (rc == RC_OK) std::cout << "Index created: idx_table4_num" << std::endl; else std::cout << "Index create rc=" << rc << " (may already exist)" << std::endl;
+
+    // Helpers: decode and scan rows from stored pages
+    auto decodeRow = [&](const TableInfo& tinfo, const char* buf, int len, int& numOut, int& dataOut){
+        numOut = 0; dataOut = 0;
+        if (tinfo.attrCount >= 2 && len >= 8) {
+            numOut = *reinterpret_cast<const int*>(buf);
+            dataOut = *reinterpret_cast<const int*>(buf + sizeof(int));
+        }
+    };
+    auto scanSelectByNum = [&](const TableInfo& tinfo, int qNum){
+        for (PageNum p = tinfo.firstPage; p <= tinfo.lastPage; ++p){
+            BufferFrame* frame=nullptr; if (memManager_.getPage(tinfo.tableId, p, frame, DATA_SPACE) != RC_OK) continue;
+            auto* header = reinterpret_cast<VarPageHeader*>(frame->data);
+            int totalSlots = header->recordCount + header->deletedCount;
+            for (int s=0; s<totalSlots; ++s){
+                auto* slot = reinterpret_cast<RecordSlot*>(frame->data + sizeof(VarPageHeader) + s*sizeof(RecordSlot));
+                if (slot->isDeleted) continue;
+                int numVal=0, dataVal=0; decodeRow(tinfo, frame->data + slot->offset, slot->length, numVal, dataVal);
+                if (numVal == qNum){
+                    std::cout << "[SELECT Result] num=" << qNum << " -> data=" << dataVal
+                              << " (RID " << p << ":" << s << ")" << std::endl;
+                    memManager_.releasePage(tinfo.tableId, p);
+                    return;
+                }
+            }
+            memManager_.releasePage(tinfo.tableId, p);
+        }
+        std::cout << "[SELECT Result] num=" << qNum << " -> not found" << std::endl;
+    };
+    auto scanSelectAll = [&](const TableInfo& tinfo){
+        std::cout << "[SELECT Result] table4 rows:" << std::endl;
+        for (PageNum p = tinfo.firstPage; p <= tinfo.lastPage; ++p){
+            BufferFrame* frame=nullptr; if (memManager_.getPage(tinfo.tableId, p, frame, DATA_SPACE) != RC_OK) continue;
+            auto* header = reinterpret_cast<VarPageHeader*>(frame->data);
+            int totalSlots = header->recordCount + header->deletedCount;
+            for (int s=0; s<totalSlots; ++s){
+                auto* slot = reinterpret_cast<RecordSlot*>(frame->data + sizeof(VarPageHeader) + s*sizeof(RecordSlot));
+                if (slot->isDeleted) continue;
+                int numVal=0, dataVal=0; decodeRow(tinfo, frame->data + slot->offset, slot->length, numVal, dataVal);
+                std::cout << "  num=" << numVal << ", data=" << dataVal
+                          << " (RID " << p << ":" << s << ")" << std::endl;
+            }
+            memManager_.releasePage(tinfo.tableId, p);
+        }
+    };
+
+    // SELECT via SQL and print result by scanning pages
+    int queryNum = 5;
+    std::string selectSql = std::string("SELECT data FROM table4 WHERE num = ") + std::to_string(queryNum);
+    std::cout << "[SQL] " << selectSql << std::endl;
+    auto parseRes = parseSelectSql(selectSql);
+    if (!parseRes.ok) { std::cerr << "Parse failed: " << parseRes.error << std::endl; return RC_INVALID_OP; }
+    auto lp = buildLogicalPlan(parseRes.select);
+    auto opt = optimizeLogicalPlan(lp.plan, dataDict_);
+    auto phys = buildPhysicalPlan(opt.optimized, dataDict_, indexManager_);
+    std::cout << "[Logical Plan]\n" << printLogicalPlan(lp.plan);
+    std::cout << "[Optimized Logical Plan]\n" << printLogicalPlan(opt.optimized);
+    std::cout << "[Physical Plan Steps]\n" << printPhysicalPlan(phys);
+    scanSelectByNum(tbl, queryNum);
+
+    std::string selectAllSql = "SELECT * FROM table4";
+    std::cout << "[SQL] " << selectAllSql << std::endl;
+    parseRes = parseSelectSql(selectAllSql);
+    auto lp2 = buildLogicalPlan(parseRes.select);
+    auto opt2 = optimizeLogicalPlan(lp2.plan, dataDict_);
+    auto phys2 = buildPhysicalPlan(opt2.optimized, dataDict_, indexManager_);
+    std::cout << "[Logical Plan]\n" << printLogicalPlan(lp2.plan);
+    std::cout << "[Optimized Logical Plan]\n" << printLogicalPlan(opt2.optimized);
+    std::cout << "[Physical Plan Steps]\n" << printPhysicalPlan(phys2);
+    scanSelectAll(tbl);
+
+    std::cout << "===== Task 4 Test Completed =====" << std::endl;
     return RC_OK;
 }
 

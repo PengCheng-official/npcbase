@@ -28,6 +28,9 @@ public:
     // 执行任务三测试：索引生成/插入/修改/删除
     RC runTask3();
 
+    // 执行任务四测试：SQL解析/逻辑与物理计划
+    RC runTask4();
+
 private:
     TableManager& tableManager_;
     MemManager& memManager_;
