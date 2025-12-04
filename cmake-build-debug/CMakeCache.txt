@@ -254,6 +254,9 @@ NpcBase_IS_TOP_LEVEL:STATIC=ON
 //Value Computed by CMake
 NpcBase_SOURCE_DIR:STATIC=D:/Pengcheng/University/Year3/DBMS/NpcBase
 
+//The directory containing a CMake configuration file for antlr4-runtime.
+antlr4-runtime_DIR:PATH=antlr4-runtime_DIR-NOTFOUND
+
 
 ########################
 # INTERNAL cache entries
